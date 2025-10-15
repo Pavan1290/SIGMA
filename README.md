@@ -74,6 +74,120 @@ To stop everything:
 ./stop.sh
 ```
 
+---
+
+## How to run (step-by-step) ✅
+
+The steps below are verified on Linux. They’ll also work on macOS; on Windows use WSL or run the commands in PowerShell with equivalent syntax.
+
+### Prerequisites
+
+- Python 3.10+ (check with `python3 --version`)
+- Node.js 18+ and npm 9+ (check with `node -v` and `npm -v`)
+- Internet connection (for Playwright browser download and npm packages)
+
+### One-time setup
+
+1. Create the virtualenv and install all dependencies (backend + frontend):
+
+     ```bash
+     chmod +x setup.sh
+     ./setup.sh
+     ```
+
+     What this does:
+
+     - Creates `.venv` and installs `requirements.txt`
+     - Installs Playwright Chromium (`playwright install chromium`)
+     - Installs frontend packages (`npm install`)
+
+2. Add your environment file:
+
+     ```bash
+     cp .env.example .env
+     # edit .env and set your real API key
+     ```
+
+     Minimum variables:
+
+     - `GOOGLE_API_KEY=...` (required for Gemini)
+     - `VITE_BACKEND_URL=http://localhost:5000` (frontend talks to backend)
+
+### Run (two options)
+
+Option A — scripts (recommended):
+
+```bash
+chmod +x start.sh stop.sh
+./start.sh
+```
+
+You’ll get:
+
+- Frontend: <http://localhost:5173>
+- Backend:  <http://localhost:5000>
+- WebSocket: <ws://localhost:5000/ws>
+
+Stop both:
+
+```bash
+./stop.sh
+```
+
+Option B — manual:
+
+1. Start backend in one terminal
+
+     ```bash
+     source .venv/bin/activate
+     python backend/app.py
+     ```
+
+     Health check: <http://localhost:5000/health>
+
+2. Start frontend in another terminal
+
+     ```bash
+     npm run dev
+     ```
+
+     Vite will print the local URL (usually <http://localhost:5173>). If 5173 is busy, it will auto-pick the next port (e.g., 5174). The frontend will use `VITE_BACKEND_URL` from `.env` to call the backend.
+
+### Using the app
+
+Open the frontend in your browser and type natural language commands like:
+
+- "Send an email to test@example.com about the project update"
+- "Create a file called meeting_notes.txt with today’s agenda"
+- "Go to <https://news.ycombinator.com> and get the top 5 stories"
+
+### Troubleshooting
+
+- npm dev was killed (exit code 137): Usually means the process was killed (OOM or previous `pkill` from `start.sh`). Try:
+    - Close any previous Vite instances
+    - Run `./stop.sh` then `./start.sh` again
+    - Ensure your machine has enough free RAM
+
+- Playwright missing system deps on Linux:
+
+    ```bash
+    npx playwright install --with-deps chromium
+    ```
+
+    This may prompt for `sudo` to install apt packages.
+
+- Backend health check fails:
+    - Confirm `.venv` is active (you see `(.venv)` in your shell)
+    - Ensure `GOOGLE_API_KEY` is set in `.env`
+    - Look at the terminal running `backend/app.py` for stack traces
+
+- Gmail API isn’t working:
+    - Follow the "Gmail Setup" section below
+    - Place `credentials.json` in the project root (it is gitignored)
+    - The first run will open a browser window to authorize
+
+---
+
 ### 4. Use
 
 Open <http://localhost:5173> and give natural language commands:
@@ -110,19 +224,23 @@ The system uses AI to automatically route commands to the right agent based on i
 
 ### 🔄 Self-Healing
 If an agent encounters an error, it uses AI to:
+
 1. Analyze the root cause
 2. Find an alternative approach
 3. Retry with the fix
 4. Learn from the failure
 
 ### 📊 Real-time Visibility
+
 See exactly what the AI is thinking and doing:
+
 - Planning process
 - Execution steps
 - Progress updates
 - Error recovery
 
 ### 💡 Natural Language
+
 No complex syntax - just tell it what you want in plain English.
 
 ## Gmail Setup (Optional)
@@ -147,13 +265,15 @@ For email functionality:
 
 ## Why This is Better
 
-### Old System Problems:
+### Old System Problems
+
 - ❌ Manual agents with hardcoded logic
 - ❌ Selenium (unreliable, breaks often)
 - ❌ No error recovery
 - ❌ No visibility into what's happening
 
-### New System Solutions:
+### New System Solutions
+
 - ✅ AI-powered agents that adapt
 - ✅ Gmail API + Playwright (reliable)
 - ✅ Automatic error recovery
@@ -173,6 +293,7 @@ For email functionality:
 ## Development
 
 ### Project Structure
+
 ```text
 intelligent_agents/
   ├── agent_core.py       # Base intelligent agent class
