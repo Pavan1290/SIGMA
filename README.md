@@ -1,6 +1,6 @@
 # 🧠 SIGMA-OS Intelligent Agent System
 
-**A truly intelligent AI agent system powered by Google Gemini 2.0 Flash Thinking**
+**A truly intelligent AI agent system with multi-model support and dynamic model switching**
 
 ## What's Different?
 
@@ -12,13 +12,20 @@ This is a **complete rebuild** of SIGMA-OS with:
 - **Multi-step execution**: Handles complex workflows intelligently
 - **Real-time updates**: See the AI thinking process live
 
+### 🎨 Multi-Model AI Support
+- **Gemini 2.0 Flash Exp**: 50 req/day, 10 req/min (experimental advanced reasoning)
+- **Groq Llama 3.3 70B**: 1,000 req/day, 30 req/min (fast inference)
+- **Ollama Local Models**: Unlimited (run AI locally)
+- **Dynamic Switching**: Change models in real-time without restart
+- **Smart Rate Limiting**: Visual indicators for API usage
+
 ### 🤖 Intelligent Agents
 
 #### 1. **SystemAgent**
-- Execute shell commands
+- Execute shell commands with context awareness
 - File operations (create, read, update, delete)
 - Process management
-- Screenshots
+- **Screenshots** with 4 fallback methods (pyscreenshot, gnome-screenshot, scrot, imagemagick)
 - **Uses AI to figure out HOW to execute commands**
 
 #### 2. **EmailAgent**
@@ -33,11 +40,20 @@ This is a **complete rebuild** of SIGMA-OS with:
 - Extract information from pages
 - Automate web tasks
 
-### 🧠 Powered by Gemini 2.0 Flash Thinking
-- Advanced reasoning for complex tasks
-- Learns from failures
+### 🧠 Advanced AI Features
+- Thinking and execution models for different tasks
+- Learns from failures with error memory
 - Provides explanations for every action
-- Plans multi-step solutions
+- Plans multi-step solutions with fallback strategies
+
+### 🎨 Modern UI
+- **Interactive Welcome Screen**: Feature cards with clickable examples
+- **Model Selector**: Live switching between AI models with rate limit display
+- **Compact Status**: Unobtrusive bottom-right notifications
+- **Matrix Theme**: Green aesthetic with proper contrast
+- **Real-time Updates**: See agent thinking and execution progress
+- **Expandable Details**: Hide/show technical information
+- **No Connection Spam**: Clean interface without automatic messages
 
 ## Quick Start
 
@@ -256,12 +272,18 @@ For email functionality:
 
 ## Technical Stack
 
-- **Backend**: FastAPI + WebSocket
-- **Frontend**: React + Vite
-- **AI**: Google Gemini 2.0 Flash Thinking
-- **Email**: Gmail API (official)
-- **Web**: Playwright
-- **Language**: Python 3.8+
+- **Backend**: FastAPI + WebSocket for real-time communication
+- **Frontend**: React 18 + Vite with hot reload
+- **AI Models**: 
+  - Google Gemini 2.0 Flash Exp (thinking & reasoning)
+  - Groq Llama 3.3 70B (fast inference)
+  - Ollama (local models)
+- **Model Management**: Dynamic switching without restart
+- **Email**: Gmail API (official, OAuth 2.0)
+- **Web Automation**: Playwright (headless Chrome)
+- **Screenshots**: Multi-method (pyscreenshot, gnome-screenshot, scrot, imagemagick)
+- **Language**: Python 3.10+, JavaScript ES6+
+- **Styling**: CSS with Matrix green theme
 
 ## Why This is Better
 
