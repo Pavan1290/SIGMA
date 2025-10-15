@@ -1,0 +1,37 @@
+{
+  "name": "sigma-os-assistant",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "electron:dev": "ELECTRON_START_URL=http://localhost:5173 concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron:start": "electron ."
+  },
+  "dependencies": {
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.36.0",
+    "@types/react": "^19.1.16",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.4",
+    "autoprefixer": "^10.4.21",
+    "babel-plugin-react-compiler": "^19.1.0-rc.3",
+    "concurrently": "^8.2.0",
+    "electron": "^26.0.0",
+    "eslint": "^9.36.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.22",
+    "globals": "^16.4.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.14",
+    "vite": "^7.1.7",
+    "wait-on": "^7.0.1"
+  }
+}
