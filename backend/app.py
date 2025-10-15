@@ -28,6 +28,7 @@ from intelligent_agents import (
     AgentStatus,
     AgentUpdate
 )
+from intelligent_agents.model_manager import model_manager
 
 load_dotenv()
 
@@ -42,13 +43,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configure Gemini
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-router_model = genai.GenerativeModel("gemini-2.0-flash-exp")
-
 # Initialize agents
 agents = {}
 active_websockets: List[WebSocket] = []
+
+def get_router_model():
+    """Get the current thinking model for routing"""
+    return model_manager.get_thinking_model()
 
 def broadcast_update(update: AgentUpdate):
     """Broadcast agent updates to all connected websockets"""
@@ -65,7 +66,7 @@ agents['email'] = EmailAgent(update_callback=broadcast_update)
 agents['web'] = WebAgent(update_callback=broadcast_update)
 
 print("✅ Intelligent agents initialized:")
-print("   - SystemAgent: Execute commands, manage files")
+print("   - SystemAgent: Execute commands, manage files, take screenshots")
 print("   - EmailAgent: Send/read emails via Gmail API")
 print("   - WebAgent: Browse web, extract data")
 
@@ -84,8 +85,44 @@ async def health_check():
     return {
         "status": "healthy",
         "agents": list(agents.keys()),
-        "model": "gemini-2.0-flash-thinking-exp"
+        "current_thinking_model": model_manager.current_thinking_model,
+        "current_execution_model": model_manager.current_execution_model
     }
+
+@app.get("/models")
+async def get_models():
+    """Get all available AI models"""
+    return {
+        "models": model_manager.get_available_models(),
+        "current_thinking": model_manager.current_thinking_model,
+        "current_execution": model_manager.current_execution_model
+    }
+
+@app.post("/models/thinking")
+async def set_thinking_model(request: dict):
+    """Set the thinking model"""
+    model_id = request.get("model_id")
+    success = model_manager.set_thinking_model(model_id)
+    
+    if success:
+        print(f"\n🔄 Thinking model changed to: {model_id}")
+        print(f"   Provider: {model_manager.available_models[model_id].provider}")
+        print(f"   Model: {model_manager.available_models[model_id].model_name}\n")
+        return {"success": True, "model": model_id}
+    return {"success": False, "error": "Model not available"}
+
+@app.post("/models/execution")
+async def set_execution_model(request: dict):
+    """Set the execution model"""
+    model_id = request.get("model_id")
+    success = model_manager.set_execution_model(model_id)
+    
+    if success:
+        print(f"\n🔄 Execution model changed to: {model_id}")
+        print(f"   Provider: {model_manager.available_models[model_id].provider}")
+        print(f"   Model: {model_manager.available_models[model_id].model_name}\n")
+        return {"success": True, "model": model_id}
+    return {"success": False, "error": "Model not available"}
 
 @app.post("/command", response_model=CommandResponse)
 async def execute_command(request: CommandRequest):
@@ -105,16 +142,19 @@ async def execute_command(request: CommandRequest):
         routing_prompt = f"""You are an intelligent task router for SIGMA-OS.
 
 Available agents and their capabilities:
-1. SystemAgent: Execute shell commands, file operations (create/read/update/delete files), process management, screenshots
+1. SystemAgent: Execute shell commands, file operations (create/read/update/delete files), process management, **SCREENSHOTS** (any screen capture)
 2. EmailAgent: Send emails, read emails, search emails via Gmail API
 3. WebAgent: Browse websites, extract information, automate web tasks
 
 User command: "{command}"
 
 Which agent should handle this? Consider:
+- Screenshots, screen capture → SystemAgent (ALWAYS)
 - Email-related tasks → EmailAgent
 - Web browsing/scraping → WebAgent
-- File operations, system commands → SystemAgent
+- File operations, system commands, process management → SystemAgent
+
+CRITICAL: Any mention of "screenshot", "capture screen", "take picture of screen" → MUST route to SystemAgent
 
 Respond in JSON:
 {{
@@ -123,6 +163,7 @@ Respond in JSON:
     "confidence": 0.0-1.0
 }}"""
 
+        router_model = get_router_model()
         routing_response = router_model.generate_content(routing_prompt)
         routing_text = routing_response.text.strip()
         

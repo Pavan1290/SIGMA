@@ -118,7 +118,7 @@ Which operation? Choose from:
 Respond with just the operation name."""
 
         try:
-            response = self.execution_model.generate_content(prompt)
+            response = self._get_execution_model().generate_content(prompt)
             return response.text.strip().lower().replace(' ', '_')
         except:
             return 'send_email'  # Default
@@ -147,7 +147,7 @@ If the task mentions a reminder, make it sound professional but friendly.
 Extract all email addresses from the task."""
 
         try:
-            response = self.thinking_model.generate_content(prompt)
+            response = self._get_thinking_model().generate_content(prompt)
             email_text = response.text.strip()
             
             if "```json" in email_text:
@@ -243,7 +243,7 @@ Examples:
 Respond with just the search query."""
 
         try:
-            response = self.execution_model.generate_content(prompt)
+            response = self._get_execution_model().generate_content(prompt)
             query = response.text.strip()
             
             results = self.gmail_service.users().messages().list(

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 SIGMA-OS Intelligent Agent Core
-Uses Gemini 2.0 Flash Thinking for advanced agentic AI
+Supports multiple AI models with hot-swapping
 """
 
 import os
@@ -10,13 +10,12 @@ import time
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, asdict
 from enum import Enum
-import google.generativeai as genai
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Configure Gemini with the best model for agentic tasks
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+# Import model manager
+from .model_manager import model_manager
 
 class AgentStatus(Enum):
     IDLE = "idle"
@@ -59,28 +58,19 @@ class IntelligentAgent:
         self.capabilities = capabilities
         self.update_callback = update_callback
         
-        # Use Gemini 2.0 Flash Thinking for advanced reasoning
-        self.thinking_model = genai.GenerativeModel(
-            "gemini-2.0-flash-thinking-exp-1219",
-            generation_config={
-                "temperature": 1.0,
-                "top_p": 0.95,
-                "max_output_tokens": 8192,
-            }
-        )
-        
-        # Fast execution model for quick decisions
-        self.execution_model = genai.GenerativeModel(
-            "gemini-2.0-flash-exp",
-            generation_config={
-                "temperature": 0.7,
-                "top_p": 0.95,
-                "max_output_tokens": 2048,
-            }
-        )
+        # Store reference to model manager (don't cache models!)
+        self.model_manager = model_manager
         
         self.conversation_history = []
         self.error_memory = []  # Learn from past failures
+    
+    def _get_thinking_model(self):
+        """Get current thinking model dynamically"""
+        return self.model_manager.get_thinking_model()
+    
+    def _get_execution_model(self):
+        """Get current execution model dynamically"""
+        return self.model_manager.get_execution_model()
         
     def _send_update(self, status: AgentStatus, message: str, **kwargs):
         """Send real-time update to UI"""
@@ -139,7 +129,7 @@ Think deeply about this task. Provide a detailed execution plan in JSON format:
 Be specific and actionable. Consider edge cases and error scenarios."""
 
         try:
-            response = self.thinking_model.generate_content(prompt)
+            response = self._get_thinking_model().generate_content(prompt)
             thinking_text = response.text
             
             # Extract JSON from response (handle markdown code blocks)
@@ -218,7 +208,7 @@ Respond in JSON:
 }}"""
 
         try:
-            response = self.execution_model.generate_content(prompt)
+            response = self._get_execution_model().generate_content(prompt)
             recovery_text = response.text
             
             if "```json" in recovery_text:

@@ -9,6 +9,7 @@ import json
 import time
 from typing import Dict, Any, List
 from .agent_core import IntelligentAgent, AgentStatus
+import asyncio
 
 class WebAgent(IntelligentAgent):
     """
@@ -31,50 +32,71 @@ class WebAgent(IntelligentAgent):
         )
         self.browser = None
         self.page = None
+        self._async_pw = None
     
-    def _init_browser(self):
-        """Initialize Playwright browser"""
-        
+    async def _init_browser(self):
+        """Initialize Playwright browser using async API (compatible with FastAPI/asyncio)."""
         try:
-            from playwright.sync_api import sync_playwright
-            
-            self.playwright = sync_playwright().start()
-            self.browser = self.playwright.chromium.launch(headless=False)
-            self.page = self.browser.new_page()
-            
+            from playwright.async_api import async_playwright
+            self._async_pw = await async_playwright().start()
+            self.browser = await self._async_pw.chromium.launch(headless=False)
+            self.page = await self.browser.new_page()
             return True
-            
         except ImportError:
             raise Exception("Install Playwright: pip install playwright && playwright install")
         except Exception as e:
             raise Exception(f"Browser init failed: {str(e)}")
     
     def execute_step(self, step: Dict[str, Any], context: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Execute a web operation step"""
-        
+        """Execute a web operation step; wraps async calls for compatibility with sync agent loop."""
+        async def runner():
+            return await self._execute_step_async(step, context)
+
+        # Run in existing loop if not running, otherwise spawn a new loop in a thread
+        try:
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                import threading
+                result_holder = {}
+
+                def _thread_run():
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    try:
+                        result_holder['value'] = new_loop.run_until_complete(runner())
+                    finally:
+                        new_loop.close()
+
+                t = threading.Thread(target=_thread_run)
+                t.start(); t.join()
+                return result_holder.get('value')
+            else:
+                return loop.run_until_complete(runner())
+        except RuntimeError:
+            # No running loop, safe to asyncio.run
+            return asyncio.run(runner())
+
+    async def _execute_step_async(self, step: Dict[str, Any], context: Dict[str, Any] = None) -> Dict[str, Any]:
         if not self.browser:
             self._send_update(AgentStatus.EXECUTING, "Starting browser...")
-            self._init_browser()
-        
+            await self._init_browser()
+
         tool = step.get('tool', 'auto')
         action = step.get('action', '')
-        
-        self._send_update(
-            AgentStatus.EXECUTING,
-            f"Web action: {action}"
-        )
-        
+
+        self._send_update(AgentStatus.EXECUTING, f"Web action: {action}")
+
         if tool == 'auto':
             tool = self._decide_web_action(action, context)
-        
+
         if tool == 'navigate':
-            return self._navigate(action, context)
+            return await self._navigate(action, context)
         elif tool == 'extract':
-            return self._extract_info(action, context)
+            return await self._extract_info(action, context)
         elif tool == 'interact':
-            return self._interact(action, context)
+            return await self._interact(action, context)
         else:
-            return self._ai_web_action(action, context)
+            return await self._ai_web_action(action, context)
     
     def _decide_web_action(self, action: str, context: Dict[str, Any]) -> str:
         """Use AI to decide web action type"""
@@ -90,12 +112,12 @@ Choose action type:
 Respond with just the action type."""
 
         try:
-            response = self.execution_model.generate_content(prompt)
+            response = self._get_execution_model().generate_content(prompt)
             return response.text.strip().lower()
         except:
             return 'navigate'
     
-    def _navigate(self, action: str, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def _navigate(self, action: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """Navigate to a URL"""
         
         # Use AI to extract URL from action
@@ -105,7 +127,7 @@ If no URL, provide a reasonable default based on the task.
 Respond with just the URL, nothing else."""
 
         try:
-            response = self.execution_model.generate_content(prompt)
+            response = self._get_execution_model().generate_content(prompt)
             url = response.text.strip()
             
             # Ensure URL has protocol
@@ -117,25 +139,25 @@ Respond with just the URL, nothing else."""
                 f"Navigating to: {url}"
             )
             
-            self.page.goto(url, wait_until='networkidle')
+            await self.page.goto(url, wait_until='networkidle')
             
             return {
                 "success": True,
                 "operation": "navigate",
                 "url": url,
-                "title": self.page.title()
+                "title": await self.page.title()
             }
             
         except Exception as e:
             raise Exception(f"Navigation failed: {str(e)}")
     
-    def _extract_info(self, action: str, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def _extract_info(self, action: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """Extract information from webpage"""
         
         try:
             # Get page content
-            content = self.page.content()
-            visible_text = self.page.inner_text('body')
+            content = await self.page.content()
+            visible_text = await self.page.inner_text('body')
             
             # Use AI to extract relevant information
             prompt = f"""From this webpage, extract: "{action}"
@@ -145,7 +167,7 @@ Page content (truncated):
 
 Provide the extracted information in JSON format."""
 
-            response = self.thinking_model.generate_content(prompt)
+            response = self._get_thinking_model().generate_content(prompt)
             info_text = response.text.strip()
             
             if "```json" in info_text:
@@ -164,7 +186,7 @@ Provide the extracted information in JSON format."""
         except Exception as e:
             raise Exception(f"Extraction failed: {str(e)}")
     
-    def _interact(self, action: str, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def _interact(self, action: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """Interact with webpage elements"""
         
         # Use AI to generate interaction steps
@@ -180,7 +202,7 @@ Generate Playwright code to accomplish this. Use:
 Respond with ONLY Python code using 'page' variable."""
 
         try:
-            response = self.execution_model.generate_content(prompt)
+            response = self._get_execution_model().generate_content(prompt)
             code = response.text.strip()
             
             if "```python" in code:
@@ -207,7 +229,7 @@ Respond with ONLY Python code using 'page' variable."""
         except Exception as e:
             raise Exception(f"Interaction failed: {str(e)}")
     
-    def _ai_web_action(self, action: str, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def _ai_web_action(self, action: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """Let AI figure out how to do the web action"""
         
         prompt = f"""Accomplish this web task: "{action}"
@@ -218,7 +240,7 @@ Provide Playwright code to do this. Use the 'page' object.
 Respond with ONLY Python code."""
 
         try:
-            response = self.thinking_model.generate_content(prompt)
+            response = self._get_thinking_model().generate_content(prompt)
             code = response.text.strip()
             
             if "```python" in code:
@@ -243,7 +265,13 @@ Respond with ONLY Python code."""
         """Cleanup browser"""
         if self.browser:
             try:
-                self.browser.close()
-                self.playwright.stop()
+                # Close asynchronously if open
+                try:
+                    loop = asyncio.get_event_loop()
+                    loop.run_until_complete(self.browser.close())
+                    if self._async_pw:
+                        self._async_pw.stop()
+                except Exception:
+                    pass
             except:
                 pass
