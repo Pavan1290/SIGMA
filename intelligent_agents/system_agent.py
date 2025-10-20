@@ -17,32 +17,167 @@ from .agent_core import IntelligentAgent, AgentStatus
 
 class ContextAwareEngine:
     """
-    Context-Aware Engine that tracks environment, working directory,
-    and provides intelligent path resolution
+    Advanced Context-Aware Engine that automatically detects and tracks:
+    - Operating System details
+    - File system paths (Desktop, Documents, Downloads, etc.)
+    - System resources (CPU, Memory, Disk)
+    - Network information
+    - User permissions
+    - Environment variables
+    - Current working directory
+    
+    Cross-platform compatible: Windows, macOS, Linux
     """
     def __init__(self):
+        # Basic paths
         self.cwd = os.getcwd()
         self.home = str(Path.home())
-        self.desktop = os.path.join(self.home, "Desktop")
-        self.documents = os.path.join(self.home, "Documents")
-        self.downloads = os.path.join(self.home, "Downloads")
-        self.os_type = platform.system()
-        self.shell = os.environ.get('SHELL', '/bin/bash')
+        
+        # Operating system detection
+        self.os_type = platform.system()  # Windows, Linux, Darwin (macOS)
+        self.os_version = platform.version()
+        self.os_release = platform.release()
+        self.machine = platform.machine()  # x86_64, ARM64, etc.
+        self.processor = platform.processor()
+        
+        # Platform-specific paths
+        self._detect_special_folders()
+        
+        # Shell detection
+        self._detect_shell()
+        
+        # System resources
+        self._detect_system_resources()
+        
+        # Network information
+        self._detect_network_info()
+        
+        # User information
+        self._detect_user_info()
+        
+        # Environment variables
         self.env_vars = dict(os.environ)
+        
+        # Permissions
+        self._detect_permissions()
+        
+    def _detect_special_folders(self):
+        """Detect common special folders across platforms"""
+        if self.os_type == "Windows":
+            # Windows paths
+            self.desktop = os.path.join(self.home, "Desktop")
+            self.documents = os.path.join(self.home, "Documents")
+            self.downloads = os.path.join(self.home, "Downloads")
+            self.pictures = os.path.join(self.home, "Pictures")
+            self.videos = os.path.join(self.home, "Videos")
+            self.music = os.path.join(self.home, "Music")
+            self.temp = os.environ.get('TEMP', 'C:\\Windows\\Temp')
+        else:
+            # macOS and Linux paths
+            self.desktop = os.path.join(self.home, "Desktop")
+            self.documents = os.path.join(self.home, "Documents")
+            self.downloads = os.path.join(self.home, "Downloads")
+            self.pictures = os.path.join(self.home, "Pictures")
+            self.videos = os.path.join(self.home, "Videos")
+            self.music = os.path.join(self.home, "Music")
+            self.temp = os.environ.get('TMPDIR', '/tmp')
+            
+    def _detect_shell(self):
+        """Detect shell type"""
+        if self.os_type == "Windows":
+            self.shell = os.environ.get('COMSPEC', 'cmd.exe')
+            self.shell_type = "cmd" if "cmd" in self.shell.lower() else "powershell"
+        else:
+            self.shell = os.environ.get('SHELL', '/bin/bash')
+            self.shell_type = os.path.basename(self.shell)
+            
+    def _detect_system_resources(self):
+        """Detect system resources using psutil if available, fallback to basic info"""
+        try:
+            import psutil
+            # CPU
+            self.cpu_count = psutil.cpu_count(logical=True)
+            self.cpu_percent = psutil.cpu_percent(interval=0.1)
+            
+            # Memory
+            mem = psutil.virtual_memory()
+            self.memory_total = mem.total
+            self.memory_available = mem.available
+            self.memory_percent = mem.percent
+            
+            # Disk
+            disk = psutil.disk_usage('/')
+            self.disk_total = disk.total
+            self.disk_free = disk.free
+            self.disk_percent = disk.percent
+        except ImportError:
+            # Fallback without psutil
+            self.cpu_count = os.cpu_count() or 1
+            self.cpu_percent = 0
+            self.memory_total = 0
+            self.memory_available = 0
+            self.memory_percent = 0
+            self.disk_total = 0
+            self.disk_free = 0
+            self.disk_percent = 0
+            
+    def _detect_network_info(self):
+        """Detect network information"""
+        import socket
+        try:
+            self.hostname = socket.gethostname()
+            self.local_ip = socket.gethostbyname(self.hostname)
+        except:
+            self.hostname = "unknown"
+            self.local_ip = "127.0.0.1"
+            
+    def _detect_user_info(self):
+        """Detect user information"""
+        self.username = os.environ.get('USER') or os.environ.get('USERNAME') or 'unknown'
+        self.is_admin = self._check_admin_privileges()
+        
+    def _check_admin_privileges(self):
+        """Check if running with admin/root privileges"""
+        try:
+            if self.os_type == "Windows":
+                import ctypes
+                return ctypes.windll.shell32.IsUserAnAdmin() != 0
+            else:
+                return os.geteuid() == 0
+        except:
+            return False
+            
+    def _detect_permissions(self):
+        """Detect what permissions are available"""
+        self.can_write_home = os.access(self.home, os.W_OK)
+        self.can_write_desktop = os.access(self.desktop, os.W_OK) if os.path.exists(self.desktop) else False
+        self.can_execute_commands = True  # Assume true, will fail if not
         
     def resolve_path(self, path_hint: str) -> str:
         """Intelligently resolve a path from various hints"""
         path_hint = path_hint.strip()
         
         # Handle special keywords
-        if path_hint.lower() in ['desktop', 'on desktop', 'to desktop']:
-            return self.desktop
-        elif path_hint.lower() in ['documents', 'docs']:
-            return self.documents
-        elif path_hint.lower() in ['downloads']:
-            return self.downloads
-        elif path_hint.lower() in ['home', '~']:
-            return self.home
+        keywords = {
+            'desktop': self.desktop,
+            'on desktop': self.desktop,
+            'to desktop': self.desktop,
+            'documents': self.documents,
+            'docs': self.documents,
+            'downloads': self.downloads,
+            'pictures': self.pictures,
+            'videos': self.videos,
+            'music': self.music,
+            'home': self.home,
+            '~': self.home,
+            'temp': self.temp,
+            'tmp': self.temp
+        }
+        
+        path_lower = path_hint.lower()
+        for keyword, path in keywords.items():
+            if keyword in path_lower:
+                return path
         
         # Expand ~ and environment variables
         expanded = os.path.expanduser(os.path.expandvars(path_hint))
@@ -55,16 +190,66 @@ class ContextAwareEngine:
         return os.path.join(self.cwd, expanded)
     
     def get_context(self) -> Dict[str, Any]:
-        """Get current context information"""
+        """Get comprehensive context information for AI agents"""
         return {
+            # Paths
             "cwd": self.cwd,
             "home": self.home,
             "desktop": self.desktop,
             "documents": self.documents,
             "downloads": self.downloads,
+            "pictures": self.pictures,
+            "videos": self.videos,
+            "music": self.music,
+            "temp": self.temp,
+            
+            # OS Information
             "os": self.os_type,
-            "shell": self.shell
+            "os_version": self.os_version,
+            "os_release": self.os_release,
+            "machine": self.machine,
+            "processor": self.processor,
+            
+            # Shell
+            "shell": self.shell,
+            "shell_type": self.shell_type,
+            
+            # System Resources
+            "cpu_count": self.cpu_count,
+            "cpu_percent": self.cpu_percent,
+            "memory_total_gb": round(self.memory_total / (1024**3), 2) if self.memory_total else 0,
+            "memory_available_gb": round(self.memory_available / (1024**3), 2) if self.memory_available else 0,
+            "memory_percent": self.memory_percent,
+            "disk_total_gb": round(self.disk_total / (1024**3), 2) if self.disk_total else 0,
+            "disk_free_gb": round(self.disk_free / (1024**3), 2) if self.disk_free else 0,
+            "disk_percent": self.disk_percent,
+            
+            # Network
+            "hostname": self.hostname,
+            "local_ip": self.local_ip,
+            
+            # User
+            "username": self.username,
+            "is_admin": self.is_admin,
+            
+            # Permissions
+            "can_write_home": self.can_write_home,
+            "can_write_desktop": self.can_write_desktop,
+            "can_execute_commands": self.can_execute_commands
         }
+    
+    def get_summary(self) -> str:
+        """Get a human-readable summary of the system context"""
+        ctx = self.get_context()
+        return f"""
+🖥️  System: {ctx['os']} {ctx['os_release']} ({ctx['machine']})
+👤 User: {ctx['username']} {'(Admin)' if ctx['is_admin'] else ''}
+📁 Desktop: {ctx['desktop']}
+💻 CPU: {ctx['cpu_count']} cores @ {ctx['cpu_percent']}%
+💾 RAM: {ctx['memory_available_gb']}GB / {ctx['memory_total_gb']}GB ({ctx['memory_percent']}% used)
+💿 Disk: {ctx['disk_free_gb']}GB / {ctx['disk_total_gb']}GB free
+🌐 Network: {ctx['hostname']} ({ctx['local_ip']})
+""".strip()
     
     def set_cwd(self, new_cwd: str):
         """Update current working directory"""
@@ -109,6 +294,123 @@ class SystemAgent(IntelligentAgent):
         }
         self.execution_log.append(log_entry)
         print(f"[SYSTEM AGENT] {action}: {json.dumps(details, indent=2)}")
+    
+    def think(self, task: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Enhanced thinking with specific tool selection guidance for SystemAgent"""
+        self._send_update(
+            AgentStatus.THINKING,
+            f"Analyzing task: {task}",
+            thinking_process="Breaking down the task with system context..."
+        )
+        
+        # Build context-aware prompt with tool guidance
+        context_str = ""
+        if context:
+            context_str = f"\nContext: {json.dumps(context, indent=2)}"
+        
+        sys_context = self.context_engine.get_context()
+        
+        prompt = f"""You are SystemAgent with comprehensive system awareness.
+
+Task: {task}
+{context_str}
+
+System Context:
+- OS: {sys_context['os']} {sys_context['os_release']}
+- Desktop: {sys_context['desktop']}
+- Current Dir: {sys_context['cwd']}
+- Shell: {sys_context['shell_type']}
+
+CRITICAL TOOL SELECTION RULES:
+1. **shell_command** - Use for:
+   - Listing files/directories (ls, dir, find)
+   - Checking system status (ps, df, free, uptime)
+   - Searching/finding (grep, find)
+   - Viewing file contents (cat, head, tail)
+   - ANY command that reads/displays information
+   
+2. **file_operation** - Use ONLY for:
+   - Creating new files (touch, echo >)
+   - Creating new folders (mkdir)
+   - Modifying file contents
+   - Deleting files/folders
+   
+3. **screenshot** - Use for:
+   - Taking screenshots
+   - Screen capture
+   - Capturing screen
+
+EXAMPLES:
+- "list files in desktop" → shell_command (use ls)
+- "show files" → shell_command (use ls)
+- "create file.txt" → file_operation (create new file)
+- "take screenshot" → screenshot
+
+Provide execution plan in JSON:
+{{
+    "understanding": "What the user wants",
+    "approach": "How to accomplish it",
+    "steps": [
+        {{"step": 1, "action": "list files in {sys_context['desktop']}", "tool": "shell_command", "expected_outcome": "display file list"}},
+    ],
+    "potential_issues": ["permission errors"],
+    "fallback_plan": "retry with different approach"
+}}
+
+CRITICAL: For "{task}" - if it's about LISTING/SHOWING/DISPLAYING → MUST use shell_command, NOT file_operation!"""
+
+        try:
+            response = self._get_thinking_model().generate_content(prompt)
+            thinking_text = response.text
+            
+            # Extract JSON from response
+            if "```json" in thinking_text:
+                thinking_text = thinking_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in thinking_text:
+                thinking_text = thinking_text.split("```")[1].split("```")[0].strip()
+            
+            plan = json.loads(thinking_text)
+            
+            # Force correct tool selection for common cases
+            for step in plan.get('steps', []):
+                action_lower = step.get('action', '').lower()
+                # Override if AI chose wrong tool
+                if any(word in action_lower for word in ['list', 'show', 'display', 'find', 'check', 'view']):
+                    if step.get('tool') == 'file_operation':
+                        step['tool'] = 'shell_command'
+                        print(f"[SYSTEM AGENT] AUTO-CORRECTED: Changed file_operation → shell_command for: {step.get('action')}")
+            
+            self._send_update(
+                AgentStatus.THINKING,
+                f"Plan created with {len(plan.get('steps', []))} steps",
+                thinking_process=plan.get('understanding', ''),
+                progress=20
+            )
+            
+            return plan
+            
+        except Exception as e:
+            self._send_update(
+                AgentStatus.ERROR,
+                f"Thinking failed: {str(e)}",
+                thinking_process=f"Error during planning: {str(e)}"
+            )
+            # Fallback plan for listing
+            if any(word in task.lower() for word in ['list', 'show', 'display']):
+                return {
+                    "understanding": task,
+                    "approach": "Use shell command to list files",
+                    "steps": [{"step": 1, "action": task, "tool": "shell_command", "expected_outcome": "File list displayed"}],
+                    "potential_issues": ["Permission errors"],
+                    "fallback_plan": "Retry with elevated permissions"
+                }
+            return {
+                "understanding": task,
+                "approach": "Direct execution",
+                "steps": [{"step": 1, "action": task, "tool": "auto", "expected_outcome": "Task completed"}],
+                "potential_issues": ["Unknown"],
+                "fallback_plan": "Retry with different approach"
+            }
     
     def execute_step(self, step: Dict[str, Any], context: Dict[str, Any] = None) -> Dict[str, Any]:
         """Execute a system operation step with enhanced context awareness"""
@@ -317,18 +619,23 @@ Command:"""
                 self.context_engine.set_cwd(new_dir)
             
             if result.returncode == 0:
+                # Format output for display
+                display_output = output if output else "(command completed with no output)"
+                
                 self._send_update(
                     AgentStatus.EXECUTING,
-                    f"✅ Command successful: {output[:100] if output else 'No output'}"
+                    f"✅ Success\n\n{display_output}"
                 )
                 
                 return {
                     "success": True,
                     "command": command,
                     "output": output,
+                    "formatted_output": display_output,
                     "error": error if error else None,
                     "action": action,
-                    "exit_code": 0
+                    "exit_code": 0,
+                    "message": f"Command executed successfully:\n{display_output}"
                 }
             else:
                 # Command failed but we have details

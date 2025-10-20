@@ -17,6 +17,8 @@ function IntelligentAssistant() {
   const [backendOnline, setBackendOnline] = useState(false);
   const [showModelSelector, setShowModelSelector] = useState(false); // NEW: Model selector state
   const [currentModels, setCurrentModels] = useState({ thinking: null, execution: null }); // NEW: Track selected models
+  const [currentTheme, setCurrentTheme] = useState('teal'); // NEW: Theme system
+  const [showThemeSelector, setShowThemeSelector] = useState(false); // NEW: Theme selector visibility
   const messagesEndRef = useRef(null);
   const wsRef = useRef(null);
   const reconnectTimerRef = useRef(null);
@@ -212,19 +214,100 @@ function IntelligentAssistant() {
     }
   };
 
+  const handleTerminate = () => {
+    console.log('🛑 Terminating current task...');
+    // Reset processing state
+    setIsProcessing(false);
+    setAgentStatus({ agent: null, status: 'idle', progress: 0 });
+    setCurrentTask(null);
+    addMessage('system', '🛑 Task terminated by user');
+    
+    // TODO: Send termination signal to backend via WebSocket if needed
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'terminate' }));
+    }
+  };
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Theme definitions with professional gradients
+  const themes = {
+    teal: { name: '🌊 Ocean Teal', emoji: '🌊', colors: ['#0a192f', '#1a2332', '#0f1419'] },
+    purple: { name: '🌌 Cosmic Purple', emoji: '🌌', colors: ['#0f0c29', '#302b63', '#24243e'] },
+    rose: { name: '🌹 Rose Gold', emoji: '🌹', colors: ['#2d1b3d', '#3d2a4f', '#1f1228'] },
+    forest: { name: '🌲 Forest Green', emoji: '🌲', colors: ['#0a1f1a', '#1a2f27', '#0f1914'] },
+    sunset: { name: '🌅 Sunset Orange', emoji: '🌅', colors: ['#1f1108', '#2f2414', '#191008'] },
+    midnight: { name: '🌙 Midnight Blue', emoji: '🌙', colors: ['#0a0e27', '#1a1e3f', '#0f1219'] },
+    ember: { name: '🔥 Ember Red', emoji: '🔥', colors: ['#1a0a0a', '#2a1414', '#140808'] }
+  };
+
+  const toggleThemeSelector = () => setShowThemeSelector(!showThemeSelector);
+  const selectTheme = (theme) => {
+    setCurrentTheme(theme);
+    setShowThemeSelector(false);
+    // Apply theme to root
+    document.documentElement.setAttribute('data-theme', theme);
+  };
+
   return (
-    <div className="intelligent-assistant">
+    <div className="intelligent-assistant" data-theme={currentTheme}>
+      {/* Theme Switcher Button - Top Right Corner */}
+      <button 
+        className="theme-switcher-button"
+        onClick={toggleThemeSelector}
+        title="Change Theme"
+      >
+        {themes[currentTheme].emoji}
+      </button>
+
+      {/* Theme Selector Panel */}
+      {showThemeSelector && (
+        <div className="theme-selector-panel">
+          <div className="theme-selector-header">
+            <h3>🎨 Choose Your Theme</h3>
+            <button className="close-theme-selector" onClick={() => setShowThemeSelector(false)}>✕</button>
+          </div>
+          <div className="theme-options">
+            {Object.entries(themes).map(([key, theme]) => (
+              <button
+                key={key}
+                className={`theme-option ${currentTheme === key ? 'active' : ''}`}
+                onClick={() => selectTheme(key)}
+                style={{
+                  background: `linear-gradient(135deg, ${theme.colors[0]}, ${theme.colors[1]}, ${theme.colors[2]})`
+                }}
+              >
+                <span className="theme-emoji">{theme.emoji}</span>
+                <span className="theme-name">{theme.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="header">
-        <h1>🧠 SIGMA-OS</h1>
-        <p className="subtitle">Intelligent AI Agent System</p>
+        <h1 className="logo-text">
+          <span className="logo-letter">S</span>
+          <span className="logo-letter">I</span>
+          <span className="logo-letter">G</span>
+          <span className="logo-letter">M</span>
+          <span className="logo-letter">A</span>
+          <span className="logo-dash">-</span>
+          <span className="logo-letter">O</span>
+          <span className="logo-letter">S</span>
+        </h1>
+        <p className="subtitle">
+          <span className="subtitle-word">Intelligent</span>{' '}
+          <span className="subtitle-word">AI</span>{' '}
+          <span className="subtitle-word">Agent</span>{' '}
+          <span className="subtitle-word">System</span>
+        </p>
         <div className="header-controls">
           {currentModels.thinking && (
             <div className="current-model-display">
-              <span className="model-label">🧠 Model:</span>
+              <span className="model-label">⚡ Active:</span>
               <span className="model-value">{currentModels.thinking}</span>
             </div>
           )}
@@ -233,7 +316,8 @@ function IntelligentAssistant() {
             onClick={() => setShowModelSelector(true)}
             title="Change AI Model"
           >
-            🎯 AI Models
+            <span className="model-button-icon">🤖</span>
+            <span className="model-button-text">AI Models</span>
           </button>
         </div>
       </div>
@@ -507,23 +591,79 @@ function IntelligentAssistant() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Form */}
-      <form onSubmit={handleSubmit} className="input-form">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder={isProcessing ? "Agent is working..." : "Tell me what to do..."}
-          disabled={isProcessing}
-          className="command-input"
-        />
-        <button 
-          type="submit" 
-          disabled={isProcessing || !input.trim()}
-          className="send-button"
-        >
-          {isProcessing ? '⏳' : '🚀'} {isProcessing ? 'Processing...' : 'Execute'}
-        </button>
+      {/* Input Form with Modern Design */}
+      <form onSubmit={handleSubmit} className="input-form-modern">
+        <div className="input-container">
+          <div className="input-wrapper">
+            <svg className="input-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M2 17L12 22L22 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={isProcessing ? "Agent is executing your command..." : "What would you like me to do?"}
+              disabled={isProcessing}
+              className="command-input-modern"
+            />
+            {input && !isProcessing && (
+              <button 
+                type="button" 
+                onClick={() => setInput('')}
+                className="clear-button"
+                aria-label="Clear input"
+              >
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </button>
+            )}
+          </div>
+          
+          {isProcessing ? (
+            <button 
+              type="button"
+              onClick={handleTerminate}
+              className="terminate-button"
+              aria-label="Terminate execution"
+            >
+              <svg className="button-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="6" y="6" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="2"/>
+              </svg>
+              <span className="button-text">Terminate</span>
+              <span className="button-glow"></span>
+            </button>
+          ) : (
+            <button 
+              type="submit" 
+              disabled={!input.trim()}
+              className="execute-button"
+              aria-label="Execute command"
+            >
+              <svg className="button-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M5 3L19 12L5 21V3Z" fill="currentColor"/>
+              </svg>
+              <span className="button-text">Execute</span>
+              <span className="button-glow"></span>
+            </button>
+          )}
+        </div>
+        
+        {/* Character count and status indicators */}
+        <div className="input-footer">
+          <div className="input-stats">
+            <span className="char-count">{input.length} characters</span>
+            {input.length > 500 && (
+              <span className="warning-badge">Long command - consider breaking into steps</span>
+            )}
+          </div>
+          <div className="connection-indicator">
+            <span className={`status-dot ${backendOnline ? 'online' : 'offline'}`}></span>
+            <span className="status-text">{backendOnline ? 'Connected' : 'Disconnected'}</span>
+          </div>
+        </div>
       </form>
     </div>
   );
