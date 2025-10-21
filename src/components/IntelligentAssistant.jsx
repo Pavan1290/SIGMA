@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import './IntelligentAssistant.css';
 import ModelSelector from './ModelSelector';
+import VoiceListeningModal from './VoiceListeningModal';
 
 // Backend URL config: allow override via Vite env, fallback to localhost:5000
 const BACKEND_HTTP = (import.meta?.env?.VITE_BACKEND_URL || 'http://localhost:5000').replace(/\/$/, '');
@@ -19,10 +20,84 @@ function IntelligentAssistant() {
   const [currentModels, setCurrentModels] = useState({ thinking: null, execution: null }); // NEW: Track selected models
   const [currentTheme, setCurrentTheme] = useState('teal'); // NEW: Theme system
   const [showThemeSelector, setShowThemeSelector] = useState(false); // NEW: Theme selector visibility
+  const [isVoiceSupported] = useState(typeof (window.SpeechRecognition || window.webkitSpeechRecognition) !== 'undefined');
+  const [isVoiceListening, setIsVoiceListening] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState('');
+  const [voiceIsFinal, setVoiceIsFinal] = useState(false);
   const messagesEndRef = useRef(null);
   const wsRef = useRef(null);
   const reconnectTimerRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
+  const recognitionRef = useRef(null);
+  const voiceTimeoutRef = useRef(null);
+
+  // Fetch current models on mount and when selector closes
+  useEffect(() => {
+    fetchCurrentModels();
+  }, [showModelSelector]);
+
+  // Voice recognition initialization
+  useEffect(() => {
+    if (!isVoiceSupported) return;
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onstart = () => {
+      setIsVoiceListening(true);
+      setVoiceTranscript('');
+      // Clear any existing timeout
+      if (voiceTimeoutRef.current) clearTimeout(voiceTimeoutRef.current);
+    };
+
+    recognition.onresult = (event) => {
+      let interim = '';
+      let final = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          final += transcript + ' ';
+        } else {
+          interim += transcript;
+        }
+      }
+
+      const fullTranscript = final || interim;
+      setVoiceTranscript(fullTranscript.trim());
+      setVoiceIsFinal(!!final);
+
+      // Reset timeout on new speech
+      if (voiceTimeoutRef.current) clearTimeout(voiceTimeoutRef.current);
+
+      // Auto-close after 3 seconds of silence
+      voiceTimeoutRef.current = setTimeout(() => {
+        handleVoiceEnd();
+      }, 3000);
+    };
+
+    recognition.onerror = (event) => {
+      console.error('Speech recognition error:', event.error);
+    };
+
+    recognition.onend = () => {
+      setIsVoiceListening(false);
+    };
+
+    recognitionRef.current = recognition;
+
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.abort();
+      }
+      if (voiceTimeoutRef.current) {
+        clearTimeout(voiceTimeoutRef.current);
+      }
+    };
+  }, [isVoiceSupported]);
 
   // Fetch current models on mount and when selector closes
   useEffect(() => {
@@ -157,6 +232,42 @@ function IntelligentAssistant() {
       }
       return newSet;
     });
+  };
+
+  const handleVoiceStart = () => {
+    if (!recognitionRef.current) return;
+    setVoiceTranscript('');
+    setVoiceIsFinal(false);
+    recognitionRef.current.start();
+  };
+
+  const handleVoiceEnd = () => {
+    if (!recognitionRef.current) return;
+    recognitionRef.current.stop();
+
+    // Process transcript
+    if (voiceTranscript.trim()) {
+      const triggerPhrase = 'ok sigma send';
+      const normalizedTranscript = voiceTranscript.toLowerCase();
+
+      if (normalizedTranscript.includes(triggerPhrase)) {
+        // Auto-execute: remove trigger phrase and execute
+        const command = normalizedTranscript.replace(triggerPhrase, '').trim();
+        if (command) {
+          setInput(command);
+          // We'll need to trigger submit after setting input
+          setTimeout(() => {
+            const formElement = document.querySelector('.input-form-modern');
+            if (formElement) formElement.dispatchEvent(new Event('submit', { bubbles: true }));
+          }, 0);
+        }
+      } else {
+        // Just fill the input field
+        setInput(voiceTranscript);
+      }
+    }
+
+    setIsVoiceListening(false);
   };
 
   const handleSubmit = async (e) => {
@@ -608,6 +719,19 @@ function IntelligentAssistant() {
               disabled={isProcessing}
               className="command-input-modern"
             />
+            {!isProcessing && isVoiceSupported && (
+              <button 
+                type="button" 
+                onClick={handleVoiceStart}
+                className={`voice-button ${isVoiceListening ? 'recording' : ''}`}
+                aria-label="Voice input"
+                title="Click to start voice input"
+              >
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 1C6.48 1 2 5.48 2 11V23h4v-8h4v8h4v-8h4v8h4V11c0-5.52-4.48-10-10-10zm0 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z" fill="currentColor"/>
+                </svg>
+              </button>
+            )}
             {input && !isProcessing && (
               <button 
                 type="button" 
@@ -665,6 +789,14 @@ function IntelligentAssistant() {
           </div>
         </div>
       </form>
+
+      {/* Voice Listening Modal */}
+      <VoiceListeningModal 
+        isOpen={isVoiceListening}
+        transcript={voiceTranscript}
+        isFinal={voiceIsFinal}
+        onClose={handleVoiceEnd}
+      />
     </div>
   );
 }
