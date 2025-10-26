@@ -7,6 +7,172 @@ import VoiceListeningModal from './VoiceListeningModal';
 const BACKEND_HTTP = (import.meta?.env?.VITE_BACKEND_URL || 'http://localhost:5000').replace(/\/$/, '');
 const BACKEND_WS = BACKEND_HTTP.replace(/^http/, 'ws') + '/ws';
 
+const icons = {
+  user: (size = 18) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M6 20c0-3.5 3-6 6-6s6 2.5 6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  ),
+  assistant: (size = 18) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="5" y="7" width="14" height="10" rx="3" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M8 17.5v0a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="10" cy="12" r="1.2" fill="currentColor" />
+      <circle cx="14" cy="12" r="1.2" fill="currentColor" />
+      <path d="M5 12H3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M21 12h-2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M12 5V3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  ),
+  agent: (size = 18) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.6" />
+      <circle cx="5" cy="7" r="1.8" stroke="currentColor" strokeWidth="1.4" />
+      <circle cx="19" cy="7" r="1.8" stroke="currentColor" strokeWidth="1.4" />
+      <circle cx="5" cy="17" r="1.8" stroke="currentColor" strokeWidth="1.4" />
+      <circle cx="19" cy="17" r="1.8" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M10.5 9.5 6.7 7.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <path d="M13.5 9.5 17.3 7.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <path d="M10.5 14.5 6.7 16.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <path d="M13.5 14.5 17.3 16.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  ),
+  system: (size = 18) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
+      <circle cx="12" cy="8" r="0.8" fill="currentColor" />
+      <path d="M12 11v6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  ),
+  error: (size = 18) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M8.5 8.5 15.5 15.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M15.5 8.5 8.5 15.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  ),
+  success: (size = 18) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M8 12.5l3 3 5-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  thinking: (size = 18) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 4a5 5 0 0 1 5 5c0 2-1.2 3.7-3 4.5V15a2 2 0 0 1-2 2h0a2 2 0 0 1-2-2v-1.5C8.2 12.7 7 11 7 9a5 5 0 0 1 5-5z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M10 19h4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M10.5 21h3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  ),
+  bolt: (size = 16) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M13 2 6 13h5l-1 9 7-11h-5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  ),
+  robot: (size = 16) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="6" y="6" width="12" height="12" rx="3" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M9 6V4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M15 6V4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="10" cy="12" r="1.2" fill="currentColor" />
+      <circle cx="14" cy="12" r="1.2" fill="currentColor" />
+      <path d="M8 16h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  ),
+  network: (size = 16) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4.5 10a12.6 12.6 0 0 1 15 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M7 13.5a7.5 7.5 0 0 1 10 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M9.5 17a3 3 0 0 1 5 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="12" cy="20" r="1" fill="currentColor" />
+    </svg>
+  ),
+  realtime: (size = 20) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 5.5a6.5 6.5 0 1 1-6.2 8.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M12 3v2.5L9.5 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M12 9v4l2.5 1.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  folder: (size = 18) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M3 7h6l2 3h10v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  storage: (size = 18) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <ellipse cx="12" cy="7" rx="7" ry="3" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M5 7v10c0 1.66 3.13 3 7 3s7-1.34 7-3V7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M5 12c0 1.66 3.13 3 7 3s7-1.34 7-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  ),
+  document: (size = 18) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M7 3h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M14 3v6h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  camera: (size = 18) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4 7h3l1.5-2.5h7L17 7h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="13" r="3" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  ),
+  clock: (size = 18) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  spark: (size = 18) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 3l1.5 5h5l-4 3 1.5 5-4-3-4 3 1.5-5-4-3h5L12 3Z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  chevronDown: (size = 16) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  chevronRight: (size = 14) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  target: (size = 18) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.6" />
+      <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M12 4v2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M12 18v2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M4 12h2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M18 12h2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  ),
+  clipboard: (size = 18) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M16 4h1a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="8" y="2" width="8" height="4" rx="1.5" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M9 10h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M9 14h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  ),
+  wrench: (size = 16) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M21 3a4 4 0 0 0-5.66 5.66L6 17.99 3 21l3.01-3 9.33-9.34A4 4 0 0 0 21 3Z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="7.5" cy="18.5" r="0.8" fill="currentColor" />
+    </svg>
+  ),
+  alert: (size = 18) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 4 3 20h18L12 4Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M12 10v4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="12" cy="17" r="0.8" fill="currentColor" />
+    </svg>
+  ),
+};
+
 function IntelligentAssistant() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState([]);
@@ -28,12 +194,17 @@ function IntelligentAssistant() {
   const [archivedChats, setArchivedChats] = useState([]);
   const [showSidebar, setShowSidebar] = useState(true);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [headerHidden, setHeaderHidden] = useState(false); // Track navbar visibility
   const messagesEndRef = useRef(null);
   const wsRef = useRef(null);
   const reconnectTimerRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
   const recognitionRef = useRef(null);
   const voiceTimeoutRef = useRef(null);
+  const voiceTranscriptRef = useRef('');
+  const scrollTimeoutRef = useRef(null); // NEW: Timeout for auto-show navbar
+  const messagesContainerRef = useRef(null); // NEW: Reference to scrollable container
+  const lastScrollTimeRef = useRef(0); // NEW: Track last scroll time
 
   // Fetch current models on mount and when selector closes
   useEffect(() => {
@@ -53,6 +224,7 @@ function IntelligentAssistant() {
     recognition.onstart = () => {
       setIsVoiceListening(true);
       setVoiceTranscript('');
+      voiceTranscriptRef.current = '';
       // Clear any existing timeout
       if (voiceTimeoutRef.current) clearTimeout(voiceTimeoutRef.current);
     };
@@ -70,17 +242,27 @@ function IntelligentAssistant() {
         }
       }
 
-      const fullTranscript = final || interim;
-      setVoiceTranscript(fullTranscript.trim());
+      // Build full transcript: accumulated final results + current interim
+      const accumulatedFinal = voiceTranscriptRef.current;
+      const displayTranscript = accumulatedFinal + (final ? final : interim);
+      
+      setVoiceTranscript(displayTranscript.trim());
       setVoiceIsFinal(!!final);
 
-      // Reset timeout on new speech
+      // Only update ref with FINAL results
+      if (final) {
+        voiceTranscriptRef.current = accumulatedFinal + final;
+      }
+
+      // Clear previous timeout
       if (voiceTimeoutRef.current) clearTimeout(voiceTimeoutRef.current);
 
-      // Auto-close after 3 seconds of silence
-      voiceTimeoutRef.current = setTimeout(() => {
-        handleVoiceEnd();
-      }, 3000);
+      // Auto-close after 3 seconds of silence (only if we have final text)
+      if (final) {
+        voiceTimeoutRef.current = setTimeout(() => {
+          handleVoiceEnd();
+        }, 3000);
+      }
     };
 
     recognition.onerror = (event) => {
@@ -143,7 +325,7 @@ function IntelligentAssistant() {
     const ws = new WebSocket(BACKEND_WS);
     
     ws.onopen = () => {
-      console.log('✅ Connected to SIGMA-OS Agent System');
+    console.log('Connected to SIGMA-OS Agent System');
       // Don't add system message on connection - keep it clean!
       setBackendOnline(true);
       reconnectAttemptsRef.current = 0; // reset backoff
@@ -154,7 +336,7 @@ function IntelligentAssistant() {
       
       if (data.type === 'connection') {
         // Don't show connection messages - keep UI clean
-        console.log(`✅ ${data.message}`, data.agents);
+  console.log(`${data.message}`, data.agents);
       } else if (data.agent_name) {
         // Agent update
         handleAgentUpdate(data);
@@ -209,8 +391,8 @@ function IntelligentAssistant() {
 
     // Show in chat if significant
     if (update.status === 'success' || update.status === 'error') {
-      const icon = update.status === 'success' ? '✅' : '❌';
-      addMessage('agent', `${icon} ${update.agent_name}: ${update.message}`);
+    const statusLabel = update.status === 'success' ? 'Success' : 'Error';
+    addMessage('agent', `${statusLabel} • ${update.agent_name}: ${update.message}`);
     }
   };
 
@@ -294,30 +476,45 @@ function IntelligentAssistant() {
   const handleVoiceEnd = () => {
     if (!recognitionRef.current) return;
     recognitionRef.current.stop();
+    setIsVoiceListening(false);
 
-    // Process transcript
-    if (voiceTranscript.trim()) {
-      const triggerPhrase = 'ok sigma send';
-      const normalizedTranscript = voiceTranscript.toLowerCase();
+    // Process transcript using ref (which has the current value)
+    const transcript = voiceTranscriptRef.current.trim();
+    
+    if (transcript) {
+      // Check for trigger phrases (case-insensitive)
+      const normalizedTranscript = transcript.toLowerCase();
+      const triggerPhrases = ['ok sigma send', 'okay sigma send', 'ok sigma', 'sigma send'];
+      
+      let shouldAutoExecute = false;
+      let executedPhrase = '';
+      
+      for (const phrase of triggerPhrases) {
+        if (normalizedTranscript.includes(phrase)) {
+          shouldAutoExecute = true;
+          executedPhrase = phrase;
+          break;
+        }
+      }
 
-      if (normalizedTranscript.includes(triggerPhrase)) {
+      if (shouldAutoExecute) {
         // Auto-execute: remove trigger phrase and execute
-        const command = normalizedTranscript.replace(triggerPhrase, '').trim();
+        const command = transcript.replace(new RegExp(executedPhrase, 'i'), '').trim();
         if (command) {
           setInput(command);
-          // We'll need to trigger submit after setting input
+          // Trigger submit after a tiny delay to ensure state updates
           setTimeout(() => {
             const formElement = document.querySelector('.input-form-modern');
-            if (formElement) formElement.dispatchEvent(new Event('submit', { bubbles: true }));
-          }, 0);
+            if (formElement) {
+              formElement.dispatchEvent(new Event('submit', { bubbles: true }));
+            }
+          }, 50);
         }
       } else {
-        // Just fill the input field
-        setInput(voiceTranscript);
+        // Just fill the input field - no auto-execute
+        setInput(transcript);
       }
     }
-
-    setIsVoiceListening(false);
   };
 
   const handleSubmit = async (e) => {
@@ -327,6 +524,7 @@ function IntelligentAssistant() {
     const userCommand = input.trim();
     setInput('');
     setIsProcessing(true);
+    setHeaderHidden(true); // Hide navbar during task execution
     setThinkingProcess([]);
     setCurrentTask({
       command: userCommand,
@@ -360,28 +558,29 @@ function IntelligentAssistant() {
 
         // Add success message with expandable details
         addMessage('assistant', 
-          `✅ Task completed successfully!`,
+          'Task completed successfully!',
           metadata
         );
       } else {
-        addMessage('error', `❌ Task failed: ${data.result.error || 'Unknown error'}`);
+        addMessage('error', `Task failed: ${data.result.error || 'Unknown error'}`);
       }
     } catch (error) {
-      addMessage('error', `❌ Connection error: ${error.message}`);
+      addMessage('error', `Connection error: ${error.message}`);
     } finally {
       setIsProcessing(false);
+      // Keep navbar hidden after task completes - user can click expand button if needed
       setAgentStatus({ agent: null, status: 'idle', progress: 0 });
       setCurrentTask(null);
     }
   };
 
   const handleTerminate = () => {
-    console.log('🛑 Terminating current task...');
-    // Reset processing state
+  console.log('Terminating current task...');
+    // Reset processing state - keep navbar hidden
     setIsProcessing(false);
     setAgentStatus({ agent: null, status: 'idle', progress: 0 });
     setCurrentTask(null);
-    addMessage('system', '🛑 Task terminated by user');
+  addMessage('system', 'Task terminated by user');
     
     // TODO: Send termination signal to backend via WebSocket if needed
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -393,15 +592,22 @@ function IntelligentAssistant() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Keep navbar hidden during task execution
+  useEffect(() => {
+    if (isProcessing) {
+      setHeaderHidden(true);
+    }
+  }, [isProcessing]);
+
   // Theme definitions with professional gradients
   const themes = {
-    teal: { name: '🌊 Ocean Teal', emoji: '🌊', colors: ['#0a192f', '#1a2332', '#0f1419'] },
-    purple: { name: '🌌 Cosmic Purple', emoji: '🌌', colors: ['#0f0c29', '#302b63', '#24243e'] },
-    rose: { name: '🌹 Rose Gold', emoji: '🌹', colors: ['#2d1b3d', '#3d2a4f', '#1f1228'] },
-    forest: { name: '🌲 Forest Green', emoji: '🌲', colors: ['#0a1f1a', '#1a2f27', '#0f1914'] },
-    sunset: { name: '🌅 Sunset Orange', emoji: '🌅', colors: ['#1f1108', '#2f2414', '#191008'] },
-    midnight: { name: '🌙 Midnight Blue', emoji: '🌙', colors: ['#0a0e27', '#1a1e3f', '#0f1219'] },
-    ember: { name: '🔥 Ember Red', emoji: '🔥', colors: ['#1a0a0a', '#2a1414', '#140808'] }
+    teal: { name: 'Ocean Teal', colors: ['#0a192f', '#1a2332', '#0f1419'] },
+    purple: { name: 'Cosmic Purple', colors: ['#0f0c29', '#302b63', '#24243e'] },
+    rose: { name: 'Rose Gold', colors: ['#2d1b3d', '#3d2a4f', '#1f1228'] },
+    forest: { name: 'Forest Green', colors: ['#0a1f1a', '#1a2f27', '#0f1914'] },
+    sunset: { name: 'Sunset Orange', colors: ['#1f1108', '#2f2414', '#191008'] },
+    midnight: { name: 'Midnight Blue', colors: ['#0a0e27', '#1a1e3f', '#0f1219'] },
+    ember: { name: 'Ember Red', colors: ['#1a0a0a', '#2a1414', '#140808'] }
   };
 
   const toggleThemeSelector = () => setShowThemeSelector(!showThemeSelector);
@@ -412,46 +618,102 @@ function IntelligentAssistant() {
     document.documentElement.setAttribute('data-theme', theme);
   };
 
+  const statusIcons = {
+    thinking: icons.thinking(18),
+    executing: icons.agent(18),
+    success: icons.success(18),
+    error: icons.error(18)
+  };
+
+  const renderMessageIcon = (type) => {
+    switch (type) {
+      case 'user':
+        return icons.user(18);
+      case 'assistant':
+        return icons.assistant(18);
+      case 'agent':
+        return icons.agent(18);
+      case 'system':
+        return icons.system(18);
+      case 'error':
+        return icons.error(18);
+      default:
+        return icons.system(18);
+    }
+  };
+
   return (
-    <div className={`intelligent-assistant ${showSidebar ? 'panel-open' : 'panel-closed'}`} data-theme={currentTheme}>
-      {/* Theme Switcher Button - Top Right Corner */}
-      <button 
-        className="theme-switcher-button"
-        onClick={toggleThemeSelector}
-        title="Change Theme"
-      >
-        {themes[currentTheme].emoji}
-      </button>
-
-      {/* Chat panel toggle for mobile */}
+    <div className={`intelligent-assistant ${showSidebar ? 'panel-open' : 'panel-closed'} ${headerHidden ? 'header-hidden' : ''}`} data-theme={currentTheme}>
+      {/* Professional Sidebar Toggle Button - Top Left */}
       <button
-        className="chat-toggle-button"
-        onClick={() => setShowSidebar(true)}
-        title="Open chats"
+        className={`chat-toggle-button ${showSidebar ? 'is-open' : ''}`}
+        onClick={() => setShowSidebar(!showSidebar)}
+        title={showSidebar ? "Close sidebar" : "Open sidebar"}
+        aria-label="Toggle sidebar"
+        aria-pressed={showSidebar}
       >
-        💬
+        <span className="hamburger-icon" aria-hidden="true">
+          <span className="hamburger-line"></span>
+          <span className="hamburger-line"></span>
+          <span className="hamburger-line"></span>
+        </span>
       </button>
 
-      {/* Small open-tab shown when panel is closed (desktop/tablet) */}
+      {/* Small tab on the left edge when panel closed (mirrors .chat-open-tab CSS) */}
       <button
         className="chat-open-tab"
         onClick={() => setShowSidebar(true)}
-        title="Open chats"
-        aria-label="Open chats"
+        aria-label="Open sidebar"
+        title="Open sidebar"
       >
-        💬
+        <span className="hamburger-icon" aria-hidden="true">
+          <span className="hamburger-line"></span>
+          <span className="hamburger-line"></span>
+          <span className="hamburger-line"></span>
+        </span>
       </button>
 
       {/* Chat panel (left) - visible on wide screens, collapsible on mobile */}
       <aside className={`chat-panel ${showSidebar ? 'open' : ''}`}>
         <div className="chat-panel-header">
           <h3>Chats</h3>
-          <button className="chat-panel-close" onClick={() => setShowSidebar(false)}>✕</button>
+          <div className="chat-panel-header-controls">
+            <button 
+              className="theme-switcher-button-sidebar"
+              onClick={toggleThemeSelector}
+              title="Change Theme"
+              aria-label="Change theme"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="5" stroke="currentColor" strokeWidth="2"/>
+                <path d="M12 1v6M12 17v6M4.22 4.22l4.24 4.24M15.54 15.54l4.24 4.24M1 12h6M17 12h6M4.22 19.78l4.24-4.24M15.54 8.46l4.24-4.24" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+            </button>
+            {/* Use the same hamburger icon for closing so open/close use the same visual */}
+            <button className="chat-panel-close is-open" onClick={() => setShowSidebar(false)} title="Close sidebar" aria-label="Close sidebar">
+              <span className="hamburger-icon" aria-hidden="true">
+                <span className="hamburger-line"></span>
+                <span className="hamburger-line"></span>
+                <span className="hamburger-line"></span>
+              </span>
+            </button>
+          </div>
         </div>
 
         <div className="chat-panel-controls">
-          <button className="new-chat-button" onClick={handleNewChat} title="Start New Chat (saves current)">➕ New Chat</button>
-          <button className="clear-chat-button" onClick={requestClearChat} title="Clear current chat">🗑️ Clear</button>
+          <button className="new-chat-button" onClick={handleNewChat} title="Start New Chat (saves current)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{marginRight: '8px'}}>
+              <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            New Chat
+          </button>
+          <button className="clear-chat-button" onClick={requestClearChat} title="Clear current chat">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{marginRight: '8px'}}>
+              <path d="M3 6h18M8 6v12a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+            Clear
+          </button>
         </div>
 
         <div className="current-chat-meta">
@@ -480,12 +742,28 @@ function IntelligentAssistant() {
         </div>
       </aside>
 
+      {/* Navbar Expand Button - Appears when navbar is hidden */}
+      {headerHidden && (
+        <button
+          className="navbar-expand-button"
+          onClick={() => setHeaderHidden(false)}
+          title="Show navbar"
+        >
+          <span className="inline-icon" aria-hidden="true">{icons.chevronDown(16)}</span>
+          <span>Show Navbar</span>
+        </button>
+      )}
+
       {/* Theme Selector Panel */}
       {showThemeSelector && (
         <div className="theme-selector-panel">
           <div className="theme-selector-header">
-            <h3>🎨 Choose Your Theme</h3>
-            <button className="close-theme-selector" onClick={() => setShowThemeSelector(false)}>✕</button>
+            <h3>Choose Your Theme</h3>
+            <button className="close-theme-selector" onClick={() => setShowThemeSelector(false)} aria-label="Close theme selector">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
           </div>
           <div className="theme-options">
             {Object.entries(themes).map(([key, theme]) => (
@@ -497,7 +775,11 @@ function IntelligentAssistant() {
                   background: `linear-gradient(135deg, ${theme.colors[0]}, ${theme.colors[1]}, ${theme.colors[2]})`
                 }}
               >
-                <span className="theme-emoji">{theme.emoji}</span>
+                <span
+                  className="theme-swatch"
+                  aria-hidden="true"
+                  style={{ background: `linear-gradient(135deg, ${theme.colors[0]}, ${theme.colors[1]}, ${theme.colors[2]})` }}
+                />
                 <span className="theme-name">{theme.name}</span>
               </button>
             ))}
@@ -525,7 +807,8 @@ function IntelligentAssistant() {
         <div className="header-controls">
           {currentModels.thinking && (
             <div className="current-model-display">
-              <span className="model-label">⚡ Active:</span>
+              <span className="model-label-icon" aria-hidden="true">{icons.bolt(14)}</span>
+              <span className="model-label-text">Active:</span>
               <span className="model-value">{currentModels.thinking}</span>
             </div>
           )}
@@ -534,7 +817,7 @@ function IntelligentAssistant() {
             onClick={() => setShowModelSelector(true)}
             title="Change AI Model"
           >
-            <span className="model-button-icon">🤖</span>
+            <span className="model-button-icon" aria-hidden="true">{icons.robot(16)}</span>
             <span className="model-button-text">AI Models</span>
           </button>
         </div>
@@ -546,37 +829,14 @@ function IntelligentAssistant() {
         onClose={() => setShowModelSelector(false)} 
       />
 
-      {/* Saved Chats Sidebar */}
-      {showSidebar && (
-        <aside className="chat-sidebar">
-          <div className="sidebar-header">
-            <h3>Saved Chats</h3>
-            <button onClick={() => setShowSidebar(false)}>✕</button>
-          </div>
-          {archivedChats.length === 0 ? (
-            <div className="empty-archive">No saved chats</div>
-          ) : (
-            <div className="archive-list">
-              {archivedChats.map(chat => (
-                <div key={chat.id} className="chat-card">
-                  <div className="chat-card-title">{chat.title}</div>
-                  <div className="chat-card-meta">{new Date(chat.timestamp).toLocaleString()}</div>
-                  <div className="chat-card-actions">
-                    <button onClick={() => handleRestoreChat(chat.id)}>Restore</button>
-                    <button onClick={() => handleDeleteArchived(chat.id)}>Delete</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </aside>
-      )}
-
       {/* Backend connectivity banner */}
       {!backendOnline && (
         <div className="agent-status error" style={{ margin: '0 1rem 1rem', borderLeft: '4px solid #ef4444' }}>
           <div className="status-header">
-            <span className="agent-name">🛜 Backend disconnected</span>
+            <span className="agent-name">
+              <span className="inline-icon" aria-hidden="true">{icons.network(16)}</span>
+              Backend disconnected
+            </span>
             <span className="status-badge">reconnecting...</span>
           </div>
           <div className="status-message">
@@ -589,11 +849,8 @@ function IntelligentAssistant() {
       {agentStatus.agent && (
         <div className={`agent-status-compact ${agentStatus.status}`}>
           <div className="compact-header">
-            <span className="compact-icon">
-              {agentStatus.status === 'thinking' && '🧠'}
-              {agentStatus.status === 'executing' && '⚙️'}
-              {agentStatus.status === 'success' && '✅'}
-              {agentStatus.status === 'error' && '❌'}
+            <span className="compact-icon" aria-hidden="true">
+              {statusIcons[agentStatus.status] || icons.system(18)}
             </span>
             <span className="compact-text">{agentStatus.message}</span>
           </div>
@@ -609,49 +866,60 @@ function IntelligentAssistant() {
       {/* Removed to keep UI clean - thinking details now in expandable sections */}
 
       {/* Chat Messages */}
-      <div className="messages-container">
+      <div className="messages-container" ref={messagesContainerRef}>
         {messages.length === 0 && (
           <div className="welcome-message">
             <div className="welcome-header">
-              <h2>👋 Welcome to SIGMA-OS</h2>
+              <h2>
+                <span className="inline-icon" aria-hidden="true">{icons.spark(20)}</span>
+                Welcome to SIGMA-OS
+              </h2>
               <p className="welcome-subtitle">Your intelligent AI agent system with multi-model support</p>
             </div>
             
             <div className="features-grid">
               <div className="feature-card">
-                <span className="feature-icon">🤖</span>
+                <span className="feature-icon" aria-hidden="true">{icons.assistant(28)}</span>
                 <h3>Smart Agents</h3>
                 <p>System, Email, and Web agents ready to help</p>
               </div>
               <div className="feature-card">
-                <span className="feature-icon">⚡</span>
+                <span className="feature-icon" aria-hidden="true">{icons.network(28)}</span>
                 <h3>Multi-Model AI</h3>
                 <p>Switch between Gemini, Groq, and Ollama</p>
               </div>
               <div className="feature-card">
-                <span className="feature-icon">🔄</span>
+                <span className="feature-icon" aria-hidden="true">{icons.realtime(28)}</span>
                 <h3>Real-time</h3>
                 <p>Live updates and intelligent task execution</p>
               </div>
             </div>
 
             <div className="example-commands">
-              <h3>✨ Try these commands:</h3>
+              <h3>
+                <span className="inline-icon" aria-hidden="true">{icons.spark(16)}</span>
+                Try these commands:
+              </h3>
               <ul>
                 <li onClick={() => setInput("list files in my desktop")}>
-                  📁 "list files in my desktop"
+                  <span className="inline-icon" aria-hidden="true">{icons.folder(18)}</span>
+                  "list files in my desktop"
                 </li>
                 <li onClick={() => setInput("check disk space")}>
-                  💾 "check disk space"
+                  <span className="inline-icon" aria-hidden="true">{icons.storage(18)}</span>
+                  "check disk space"
                 </li>
                 <li onClick={() => setInput("create a file called test.txt with hello world")}>
-                  📝 "create a file called test.txt with hello world"
+                  <span className="inline-icon" aria-hidden="true">{icons.document(18)}</span>
+                  "create a file called test.txt with hello world"
                 </li>
                 <li onClick={() => setInput("take a screenshot")}>
-                  📸 "take a screenshot"
+                  <span className="inline-icon" aria-hidden="true">{icons.camera(18)}</span>
+                  "take a screenshot"
                 </li>
                 <li onClick={() => setInput("what's the current time and date")}>
-                  🕐 "what's the current time and date"
+                  <span className="inline-icon" aria-hidden="true">{icons.clock(18)}</span>
+                  "what's the current time and date"
                 </li>
               </ul>
             </div>
@@ -668,13 +936,7 @@ function IntelligentAssistant() {
         {messages.map((msg, idx) => (
           <div key={msg.id || idx} className={`message ${msg.type}`}>
             <div className="message-header">
-              <span className="message-icon">
-                {msg.type === 'user' && '👤'}
-                {msg.type === 'assistant' && '🤖'}
-                {msg.type === 'agent' && '⚙️'}
-                {msg.type === 'system' && '💡'}
-                {msg.type === 'error' && '❌'}
-              </span>
+              <span className="message-icon" aria-hidden="true">{renderMessageIcon(msg.type)}</span>
               <span className="message-time">{msg.timestamp}</span>
             </div>
             <div className="message-content">
@@ -684,15 +946,24 @@ function IntelligentAssistant() {
                   <div className="task-summary">
                     <h3>{msg.content}</h3>
                     <div className="task-meta">
-                      <span className="meta-item">🤖 Agent: <strong>{msg.metadata.agent}</strong></span>
-                      <span className="meta-item">📝 Task: {msg.metadata.task}</span>
+                        <span className="meta-item">
+                          <span className="inline-icon" aria-hidden="true">{icons.assistant(16)}</span>
+                          Agent: <strong>{msg.metadata.agent}</strong>
+                        </span>
+                        <span className="meta-item">
+                          <span className="inline-icon" aria-hidden="true">{icons.document(16)}</span>
+                          Task: {msg.metadata.task}
+                        </span>
                     </div>
                   </div>
 
                   {/* MAIN OUTPUT - Show directly (not hidden) */}
                   {msg.metadata.results && msg.metadata.results.length > 0 && (
                     <div className="main-output">
-                      <h4>📤 Output:</h4>
+                      <h4>
+                        <span className="inline-icon" aria-hidden="true">{icons.document(16)}</span>
+                        Output:
+                      </h4>
                       {msg.metadata.results.map((result, idx) => (
                         <div key={idx} className="output-item">
                           {result.output && (
@@ -702,7 +973,10 @@ function IntelligentAssistant() {
                             <div className="command-executed">
                               <code>{result.command}</code>
                               <span className={`status-indicator ${result.success ? 'success' : 'failed'}`}>
-                                {result.success ? '✅' : '❌'}
+                                <span className="inline-icon" aria-hidden="true">
+                                  {result.success ? icons.success(14) : icons.error(14)}
+                                </span>
+                                {result.success ? 'Success' : 'Failed'}
                               </span>
                             </div>
                           )}
@@ -717,8 +991,10 @@ function IntelligentAssistant() {
                       className="expand-button"
                       onClick={() => toggleMessageExpanded(msg.id)}
                     >
-                      {expandedMessages.has(msg.id) ? '▼' : '▶'} 
-                      {expandedMessages.has(msg.id) ? ' Hide Technical Details' : ' Show Technical Details'}
+                      <span className="inline-icon" aria-hidden="true">
+                        {expandedMessages.has(msg.id) ? icons.chevronDown(12) : icons.chevronRight(12)}
+                      </span>
+                      {expandedMessages.has(msg.id) ? 'Hide Technical Details' : 'Show Technical Details'}
                     </button>
 
                     {expandedMessages.has(msg.id) && (
@@ -726,7 +1002,10 @@ function IntelligentAssistant() {
                         {/* AI's Understanding */}
                         {msg.metadata.plan && (
                           <div className="detail-section">
-                            <h4>🧠 AI's Understanding</h4>
+                            <h4>
+                              <span className="inline-icon" aria-hidden="true">{icons.thinking(16)}</span>
+                              AI's Understanding
+                            </h4>
                             <p>{msg.metadata.plan.understanding}</p>
                           </div>
                         )}
@@ -734,7 +1013,10 @@ function IntelligentAssistant() {
                         {/* Strategy */}
                         {msg.metadata.plan && (
                           <div className="detail-section">
-                            <h4>🎯 Strategy</h4>
+                            <h4>
+                              <span className="inline-icon" aria-hidden="true">{icons.target(16)}</span>
+                              Strategy
+                            </h4>
                             <p>{msg.metadata.plan.approach}</p>
                           </div>
                         )}
@@ -742,12 +1024,18 @@ function IntelligentAssistant() {
                         {/* Steps Executed */}
                         {msg.metadata.plan && msg.metadata.plan.steps && (
                           <div className="detail-section">
-                            <h4>📋 Steps Planned</h4>
+                            <h4>
+                              <span className="inline-icon" aria-hidden="true">{icons.clipboard(16)}</span>
+                              Steps Planned
+                            </h4>
                             {msg.metadata.plan.steps.map((step, idx) => (
                               <div key={idx} className="step-item">
                                 <div className="step-header">
                                   <span className="step-number">Step {step.step}</span>
-                                  <span className="step-tool">🔧 Tool: {step.tool}</span>
+                                  <span className="step-tool">
+                                    <span className="inline-icon" aria-hidden="true">{icons.wrench(14)}</span>
+                                    Tool: {step.tool}
+                                  </span>
                                 </div>
                                 <div className="step-action">{step.action}</div>
                                 <div className="step-outcome">
@@ -761,12 +1049,18 @@ function IntelligentAssistant() {
                         {/* Actual Execution Results */}
                         {msg.metadata.results && msg.metadata.results.length > 0 && (
                           <div className="detail-section">
-                            <h4>✅ What Actually Happened</h4>
+                            <h4>
+                              <span className="inline-icon" aria-hidden="true">{icons.success(16)}</span>
+                              What Actually Happened
+                            </h4>
                             {msg.metadata.results.map((result, idx) => (
                               <div key={idx} className="execution-result">
                                 <div className="result-header">
                                   <span className={`result-status ${result.success ? 'success' : 'failed'}`}>
-                                    {result.success ? '✅ Success' : '❌ Failed'}
+                                    <span className="inline-icon" aria-hidden="true">
+                                      {result.success ? icons.success(14) : icons.error(14)}
+                                    </span>
+                                    {result.success ? 'Success' : 'Failed'}
                                   </span>
                                   {result.exit_code !== undefined && (
                                     <span className="exit-code">Exit Code: {result.exit_code}</span>
@@ -813,7 +1107,10 @@ function IntelligentAssistant() {
                         {/* Context Awareness Info */}
                         {msg.metadata.plan && msg.metadata.plan.potential_issues && (
                           <div className="detail-section">
-                            <h4>⚠️ Potential Issues Considered</h4>
+                            <h4>
+                              <span className="inline-icon" aria-hidden="true">{icons.alert(16)}</span>
+                              Potential Issues Considered
+                            </h4>
                             <ul>
                               {msg.metadata.plan.potential_issues.map((issue, idx) => (
                                 <li key={idx}>{issue}</li>
