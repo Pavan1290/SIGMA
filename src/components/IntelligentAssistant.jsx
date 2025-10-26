@@ -24,6 +24,10 @@ function IntelligentAssistant() {
   const [isVoiceListening, setIsVoiceListening] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState('');
   const [voiceIsFinal, setVoiceIsFinal] = useState(false);
+  // Saved chats / UI controls
+  const [archivedChats, setArchivedChats] = useState([]);
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const messagesEndRef = useRef(null);
   const wsRef = useRef(null);
   const reconnectTimerRef = useRef(null);
@@ -234,6 +238,52 @@ function IntelligentAssistant() {
     });
   };
 
+  // --- Chat management: new chat, clear with confirmation, archive restore/delete ---
+  const handleNewChat = () => {
+    // Save old chat if there's content
+    if (messages.length > 0) {
+      const title = `Chat - ${new Date().toLocaleString()}`;
+      const id = Date.now() + Math.random();
+      setArchivedChats(prev => [{ id, title, messages: messages.slice(), timestamp: Date.now() }, ...prev]);
+      setShowSidebar(true);
+    }
+    // Reset UI state for a fresh chat
+    setMessages([]);
+    setIsProcessing(false);
+    setAgentStatus({ agent: null, status: 'idle', progress: 0 });
+    setCurrentTask(null);
+  };
+
+  const requestClearChat = () => {
+    // show confirmation modal to avoid accidental clear
+    setShowClearConfirm(true);
+  };
+
+  const confirmClearChat = () => {
+    setMessages([]);
+    setIsProcessing(false);
+    setAgentStatus({ agent: null, status: 'idle', progress: 0 });
+    setCurrentTask(null);
+    setShowClearConfirm(false);
+  };
+
+  const cancelClearChat = () => {
+    setShowClearConfirm(false);
+  };
+
+  const handleRestoreChat = (chatId) => {
+    const chat = archivedChats.find(c => c.id === chatId);
+    if (!chat) return;
+    setMessages(chat.messages.slice());
+    // remove from archive after restoring
+    setArchivedChats(prev => prev.filter(c => c.id !== chatId));
+    setShowSidebar(false);
+  };
+
+  const handleDeleteArchived = (chatId) => {
+    setArchivedChats(prev => prev.filter(c => c.id !== chatId));
+  };
+
   const handleVoiceStart = () => {
     if (!recognitionRef.current) return;
     setVoiceTranscript('');
@@ -363,7 +413,7 @@ function IntelligentAssistant() {
   };
 
   return (
-    <div className="intelligent-assistant" data-theme={currentTheme}>
+    <div className={`intelligent-assistant ${showSidebar ? 'panel-open' : 'panel-closed'}`} data-theme={currentTheme}>
       {/* Theme Switcher Button - Top Right Corner */}
       <button 
         className="theme-switcher-button"
@@ -372,6 +422,63 @@ function IntelligentAssistant() {
       >
         {themes[currentTheme].emoji}
       </button>
+
+      {/* Chat panel toggle for mobile */}
+      <button
+        className="chat-toggle-button"
+        onClick={() => setShowSidebar(true)}
+        title="Open chats"
+      >
+        💬
+      </button>
+
+      {/* Small open-tab shown when panel is closed (desktop/tablet) */}
+      <button
+        className="chat-open-tab"
+        onClick={() => setShowSidebar(true)}
+        title="Open chats"
+        aria-label="Open chats"
+      >
+        💬
+      </button>
+
+      {/* Chat panel (left) - visible on wide screens, collapsible on mobile */}
+      <aside className={`chat-panel ${showSidebar ? 'open' : ''}`}>
+        <div className="chat-panel-header">
+          <h3>Chats</h3>
+          <button className="chat-panel-close" onClick={() => setShowSidebar(false)}>✕</button>
+        </div>
+
+        <div className="chat-panel-controls">
+          <button className="new-chat-button" onClick={handleNewChat} title="Start New Chat (saves current)">➕ New Chat</button>
+          <button className="clear-chat-button" onClick={requestClearChat} title="Clear current chat">🗑️ Clear</button>
+        </div>
+
+        <div className="current-chat-meta">
+          <div className="current-chat-title">Current Conversation</div>
+          <div className="current-chat-count">{messages.length} messages</div>
+        </div>
+
+        <div className="saved-chats-list">
+          <h4>Saved Chats</h4>
+          {archivedChats.length === 0 ? (
+            <div className="empty-archive">No saved chats</div>
+          ) : (
+            <div className="archive-list">
+              {archivedChats.map(chat => (
+                <div key={chat.id} className="chat-card">
+                  <div className="chat-card-title">{chat.title}</div>
+                  <div className="chat-card-meta">{new Date(chat.timestamp).toLocaleString()}</div>
+                  <div className="chat-card-actions">
+                    <button onClick={() => handleRestoreChat(chat.id)}>Restore</button>
+                    <button onClick={() => handleDeleteArchived(chat.id)}>Delete</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </aside>
 
       {/* Theme Selector Panel */}
       {showThemeSelector && (
@@ -438,6 +545,32 @@ function IntelligentAssistant() {
         isOpen={showModelSelector} 
         onClose={() => setShowModelSelector(false)} 
       />
+
+      {/* Saved Chats Sidebar */}
+      {showSidebar && (
+        <aside className="chat-sidebar">
+          <div className="sidebar-header">
+            <h3>Saved Chats</h3>
+            <button onClick={() => setShowSidebar(false)}>✕</button>
+          </div>
+          {archivedChats.length === 0 ? (
+            <div className="empty-archive">No saved chats</div>
+          ) : (
+            <div className="archive-list">
+              {archivedChats.map(chat => (
+                <div key={chat.id} className="chat-card">
+                  <div className="chat-card-title">{chat.title}</div>
+                  <div className="chat-card-meta">{new Date(chat.timestamp).toLocaleString()}</div>
+                  <div className="chat-card-actions">
+                    <button onClick={() => handleRestoreChat(chat.id)}>Restore</button>
+                    <button onClick={() => handleDeleteArchived(chat.id)}>Delete</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </aside>
+      )}
 
       {/* Backend connectivity banner */}
       {!backendOnline && (
@@ -797,6 +930,20 @@ function IntelligentAssistant() {
         isFinal={voiceIsFinal}
         onClose={handleVoiceEnd}
       />
+
+      {/* Clear confirmation modal */}
+      {showClearConfirm && (
+        <div className="confirm-modal-overlay">
+          <div className="confirm-modal">
+            <h3>Confirm Clear Chat</h3>
+            <p>Are you sure you want to clear the current chat? This action cannot be undone.</p>
+            <div className="confirm-actions">
+              <button className="btn-cancel" onClick={cancelClearChat}>Cancel</button>
+              <button className="btn-confirm" onClick={confirmClearChat}>Yes, Clear</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

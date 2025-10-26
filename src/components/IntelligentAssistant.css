@@ -262,6 +262,56 @@ body::after {
   position: relative;
 }
 
+.chat-toggle-button {
+  position: fixed;
+  top: 1.5rem;
+  left: 72px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.04);
+  color: var(--text-primary);
+  cursor: pointer;
+  z-index: 1000;
+  display: none; /* shown on mobile */
+}
+
+@media (max-width: 900px) {
+  .chat-toggle-button { display: block; }
+}
+
+/* Small tab on the left edge to re-open the panel when closed */
+.chat-open-tab {
+  position: fixed;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 0.5rem 0.75rem;
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+  background: linear-gradient(135deg, rgba(168,85,247,0.12), rgba(99,102,241,0.08));
+  border: 1px solid rgba(168,85,247,0.08);
+  color: var(--text-primary);
+  cursor: pointer;
+  z-index: 1300;
+  display: none; /* shown only when panel closed */
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 64px;
+}
+
+/* Show the open tab only when the panel is closed */
+.intelligent-assistant.panel-closed .chat-open-tab {
+  display: flex;
+}
+
+/* Hide the tab when panel is open */
+.intelligent-assistant.panel-open .chat-open-tab {
+  display: none;
+}
+
 .theme-switcher-button::before {
   content: '';
   position: absolute;
@@ -1598,6 +1648,167 @@ body::after {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 0.75rem;
+}
+
+/* Sidebar toggle */
+
+.chat-panel {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 320px;
+  background: linear-gradient(180deg, rgba(6,12,24,0.98), rgba(10,18,34,0.98));
+  border-right: 1px solid rgba(168,85,247,0.06);
+  padding: 1rem;
+  z-index: 1100;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  transform: translateX(-100%); /* hidden by default, shown when .open */
+  transition: transform 0.25s ease;
+}
+
+.chat-panel.open {
+  transform: translateX(0);
+}
+
+.chat-panel .chat-panel-header {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+
+.chat-panel .chat-panel-close {
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.chat-panel-controls {
+  display:flex;
+  gap:0.5rem;
+  align-items:center;
+}
+
+.new-chat-button,
+.clear-chat-button {
+  margin-right: 0.5rem;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(168,85,247,0.08);
+  color: #fff;
+  padding: 0.4rem 0.75rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.chat-card {
+  padding: 0.6rem;
+  border: 1px solid rgba(168,85,247,0.06);
+  border-radius: 8px;
+  margin-bottom: 0.6rem;
+  background: rgba(255,255,255,0.02);
+}
+
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.chat-card-title {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+.chat-card-title {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.chat-card-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+
+.confirm-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index: 1400;
+}
+
+
+/* Layout adjustments: leave room for left chat panel on wide screens when open */
+.intelligent-assistant.panel-open {
+  padding-left: 340px; /* 320px panel + spacing */
+}
+
+.intelligent-assistant.panel-closed {
+  padding-left: 0;
+}
+
+/* Make main content area responsive when panel is present */
+.messages-container {
+  padding-left: 0.5rem;
+  padding-right: 1rem;
+}
+
+/* Mobile: collapse chat panel and make overlay */
+@media (max-width: 900px) {
+  .chat-panel {
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    position: fixed;
+    width: 75%;
+    max-width: 360px;
+  }
+  .chat-panel.open {
+    transform: translateX(0);
+  }
+  .intelligent-assistant {
+    padding-left: 0; /* no reserved space on mobile */
+  }
+}
+
+.confirm-modal {
+  background: linear-gradient(135deg, rgba(20,20,30,0.98), rgba(10,10,20,0.98));
+  padding: 1.25rem;
+  border-radius: 10px;
+  width: 420px;
+  border: 1px solid rgba(168,85,247,0.08);
+}
+
+.confirm-actions {
+  display:flex;
+  justify-content:flex-end;
+  gap:0.5rem;
+  margin-top:1rem;
+}
+
+.btn-cancel {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.06);
+  color: #fff;
+  padding: 0.5rem 0.8rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.btn-confirm {
+  background: linear-gradient(135deg,#ef4444,#dc2626);
+  border: none;
+  color: white;
+  padding: 0.5rem 0.8rem;
+  border-radius: 8px;
+  cursor: pointer;
 }
 
 .result-status {
