@@ -77,6 +77,10 @@ const VoiceListeningModal = ({ isOpen, transcript, isFinal, onClose }) => {
             Done
           </button>
           <button className="voice-cancel-button" onClick={onClose}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{marginRight: '0.5rem'}}>
+              <path d="M6 6l12 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <path d="M18 6L6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
             Cancel
           </button>
         </div>

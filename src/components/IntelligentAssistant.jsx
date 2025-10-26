@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import './IntelligentAssistant.css';
 import ModelSelector from './ModelSelector';
 import VoiceListeningModal from './VoiceListeningModal';
+import AvailablePromptsModal from './AvailablePromptsModal';
 
 // Backend URL config: allow override via Vite env, fallback to localhost:5000
 const BACKEND_HTTP = (import.meta?.env?.VITE_BACKEND_URL || 'http://localhost:5000').replace(/\/$/, '');
@@ -186,6 +187,7 @@ function IntelligentAssistant() {
   const [currentModels, setCurrentModels] = useState({ thinking: null, execution: null }); // NEW: Track selected models
   const [currentTheme, setCurrentTheme] = useState('teal'); // NEW: Theme system
   const [showThemeSelector, setShowThemeSelector] = useState(false); // NEW: Theme selector visibility
+  const [showPromptsModal, setShowPromptsModal] = useState(false); // NEW: Prompts modal state
   const [isVoiceSupported] = useState(typeof (window.SpeechRecognition || window.webkitSpeechRecognition) !== 'undefined');
   const [isVoiceListening, setIsVoiceListening] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState('');
@@ -689,13 +691,10 @@ function IntelligentAssistant() {
                 <path d="M12 1v6M12 17v6M4.22 4.22l4.24 4.24M15.54 15.54l4.24 4.24M1 12h6M17 12h6M4.22 19.78l4.24-4.24M15.54 8.46l4.24-4.24" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
               </svg>
             </button>
-            {/* Use the same hamburger icon for closing so open/close use the same visual */}
-            <button className="chat-panel-close is-open" onClick={() => setShowSidebar(false)} title="Close sidebar" aria-label="Close sidebar">
-              <span className="hamburger-icon" aria-hidden="true">
-                <span className="hamburger-line"></span>
-                <span className="hamburger-line"></span>
-                <span className="hamburger-line"></span>
-              </span>
+            <button className="chat-panel-close" onClick={() => setShowSidebar(false)} title="Close sidebar" aria-label="Close sidebar">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
             </button>
           </div>
         </div>
@@ -893,6 +892,11 @@ function IntelligentAssistant() {
                 <h3>Real-time</h3>
                 <p>Live updates and intelligent task execution</p>
               </div>
+              <div className="feature-card">
+                <span className="feature-icon" aria-hidden="true">{icons.bolt(28)}</span>
+                <h3>Lightning Fast</h3>
+                <p>Instant responses and rapid task completion</p>
+              </div>
             </div>
 
             <div className="example-commands">
@@ -909,19 +913,47 @@ function IntelligentAssistant() {
                   <span className="inline-icon" aria-hidden="true">{icons.storage(18)}</span>
                   "check disk space"
                 </li>
-                <li onClick={() => setInput("create a file called test.txt with hello world")}>
+                <li onClick={() => setInput("create a file called test.txt")}>
                   <span className="inline-icon" aria-hidden="true">{icons.document(18)}</span>
-                  "create a file called test.txt with hello world"
+                  "create a file called test.txt"
                 </li>
                 <li onClick={() => setInput("take a screenshot")}>
                   <span className="inline-icon" aria-hidden="true">{icons.camera(18)}</span>
                   "take a screenshot"
                 </li>
-                <li onClick={() => setInput("what's the current time and date")}>
+                <li onClick={() => setInput("what's the current time")}>
                   <span className="inline-icon" aria-hidden="true">{icons.clock(18)}</span>
-                  "what's the current time and date"
+                  "current time"
+                </li>
+                <li onClick={() => setInput("open file manager")}>
+                  <span className="inline-icon" aria-hidden="true">{icons.folder(18)}</span>
+                  "open file manager"
+                </li>
+                <li onClick={() => setInput("check system info")}>
+                  <span className="inline-icon" aria-hidden="true">{icons.storage(18)}</span>
+                  "system info"
+                </li>
+                <li onClick={() => setInput("search for *.txt files")}>
+                  <span className="inline-icon" aria-hidden="true">{icons.document(18)}</span>
+                  "search for *.txt files"
+                </li>
+                <li onClick={() => setInput("check network connectivity")}>
+                  <span className="inline-icon" aria-hidden="true">{icons.network(18)}</span>
+                  "network connectivity"
+                </li>
+                <li onClick={() => setInput("get CPU and memory usage")}>
+                  <span className="inline-icon" aria-hidden="true">{icons.bolt(18)}</span>
+                  "CPU and memory usage"
                 </li>
               </ul>
+              <button 
+                className="available-prompts-button" 
+                title="View more prompts"
+                onClick={() => setShowPromptsModal(true)}
+              >
+                <span className="inline-icon" aria-hidden="true">{icons.spark(16)}</span>
+                View More Prompts
+              </button>
             </div>
 
             {backendOnline && (
@@ -1228,6 +1260,14 @@ function IntelligentAssistant() {
         onClose={handleVoiceEnd}
       />
 
+      {/* Available Prompts Modal */}
+      <AvailablePromptsModal 
+        isOpen={showPromptsModal}
+        onClose={() => setShowPromptsModal(false)}
+        onSelectCommand={(command) => setInput(command)}
+        theme={currentTheme}
+      />
+
       {/* Clear confirmation modal */}
       {showClearConfirm && (
         <div className="confirm-modal-overlay">
@@ -1235,8 +1275,18 @@ function IntelligentAssistant() {
             <h3>Confirm Clear Chat</h3>
             <p>Are you sure you want to clear the current chat? This action cannot be undone.</p>
             <div className="confirm-actions">
-              <button className="btn-cancel" onClick={cancelClearChat}>Cancel</button>
-              <button className="btn-confirm" onClick={confirmClearChat}>Yes, Clear</button>
+              <button className="btn-cancel" onClick={cancelClearChat}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{marginRight: '0.5rem'}}>
+                  <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Cancel
+              </button>
+              <button className="btn-confirm" onClick={confirmClearChat}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{marginRight: '0.5rem'}}>
+                  <path d="M20 6L9 17L4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Yes, Clear
+              </button>
             </div>
           </div>
         </div>
