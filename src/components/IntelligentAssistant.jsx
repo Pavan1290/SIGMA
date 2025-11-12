@@ -3,6 +3,7 @@ import './IntelligentAssistant.css';
 import ModelSelector from './ModelSelector';
 import VoiceListeningModal from './VoiceListeningModal';
 import AvailablePromptsModal from './AvailablePromptsModal';
+import IntelligentStatsBar from './IntelligentStatsBar';
 
 // Backend URL config: allow override via Vite env, fallback to localhost:5000
 const BACKEND_HTTP = (import.meta?.env?.VITE_BACKEND_URL || 'http://localhost:5000').replace(/\/$/, '');
@@ -827,6 +828,9 @@ function IntelligentAssistant() {
         isOpen={showModelSelector} 
         onClose={() => setShowModelSelector(false)} 
       />
+
+      {/* Intelligent Stats Bar - Real-time Analytics */}
+      <IntelligentStatsBar messagesCount={messages.length} backendOnline={backendOnline} />
 
       {/* Backend connectivity banner */}
       {!backendOnline && (
