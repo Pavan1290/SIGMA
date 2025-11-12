@@ -391,10 +391,11 @@ function IntelligentAssistant() {
       }]);
     }
 
-    // Show in chat if significant
-    if (update.status === 'success' || update.status === 'error') {
-    const statusLabel = update.status === 'success' ? 'Success' : 'Error';
-    addMessage('agent', `${statusLabel} • ${update.agent_name}: ${update.message}`);
+    // Don't show redundant success/error messages in chat
+    // The task completion message already shows full results with rich details
+    // Only show critical errors that need user attention
+    if (update.status === 'error' && update.message.includes('failed')) {
+      addMessage('system', `⚠️ ${update.agent_name}: ${update.message}`);
     }
   };
 
@@ -577,14 +578,14 @@ function IntelligentAssistant() {
   };
 
   const handleTerminate = () => {
-  console.log('Terminating current task...');
+    console.log('Terminating current task...');
     // Reset processing state - keep navbar hidden
     setIsProcessing(false);
     setAgentStatus({ agent: null, status: 'idle', progress: 0 });
     setCurrentTask(null);
-  addMessage('system', 'Task terminated by user');
+    // Don't add termination message - keep chat clean
     
-    // TODO: Send termination signal to backend via WebSocket if needed
+    // Send termination signal to backend via WebSocket if needed
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'terminate' }));
     }
