@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import './IntelligentAssistant.css';
-import ModelSelector from './ModelSelector';
+import AdvancedModelSelector from './AdvancedModelSelector';
 import VoiceListeningModal from './VoiceListeningModal';
 import AvailablePromptsModal from './AvailablePromptsModal';
+import AdvancedAPIKeyManager from './AdvancedAPIKeyManager';
+import SystemStatusModal from './SystemStatusModal';
+import OutputRenderer from './OutputRenderer';
 
 // Backend URL config: allow override via Vite env, fallback to localhost:5000
 const BACKEND_HTTP = (import.meta?.env?.VITE_BACKEND_URL || 'http://localhost:5000').replace(/\/$/, '');
@@ -79,6 +82,12 @@ const icons = {
       <circle cx="10" cy="12" r="1.2" fill="currentColor" />
       <circle cx="14" cy="12" r="1.2" fill="currentColor" />
       <path d="M8 16h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  ),
+  key: (size = 16) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="8" cy="8" r="4" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M12 11l8 8M17 16l-1 1M20 19l-1 1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   ),
   network: (size = 16) => (
@@ -184,10 +193,20 @@ function IntelligentAssistant() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [backendOnline, setBackendOnline] = useState(false);
   const [showModelSelector, setShowModelSelector] = useState(false); // NEW: Model selector state
-  const [currentModels, setCurrentModels] = useState({ thinking: null, execution: null }); // NEW: Track selected models
+  const [currentModels, setCurrentModels] = useState(() => {
+    // Load from localStorage on mount
+    try {
+      const saved = localStorage.getItem('selectedModels');
+      return saved ? JSON.parse(saved) : { thinking: null, execution: null };
+    } catch (err) {
+      return { thinking: null, execution: null };
+    }
+  }); // NEW: Track selected models - persistent
   const [currentTheme, setCurrentTheme] = useState('teal'); // NEW: Theme system
   const [showThemeSelector, setShowThemeSelector] = useState(false); // NEW: Theme selector visibility
   const [showPromptsModal, setShowPromptsModal] = useState(false); // NEW: Prompts modal state
+  const [showAPIKeyManager, setShowAPIKeyManager] = useState(false); // NEW: API Key Manager state
+  const [showSystemStatus, setShowSystemStatus] = useState(false); // System Status modal
   const [isVoiceSupported] = useState(typeof (window.SpeechRecognition || window.webkitSpeechRecognition) !== 'undefined');
   const [isVoiceListening, setIsVoiceListening] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState('');
@@ -207,6 +226,14 @@ function IntelligentAssistant() {
   const scrollTimeoutRef = useRef(null); // NEW: Timeout for auto-show navbar
   const messagesContainerRef = useRef(null); // NEW: Reference to scrollable container
   const lastScrollTimeRef = useRef(0); // NEW: Track last scroll time
+
+  // Save models to localStorage whenever they change
+  useEffect(() => {
+    if (currentModels.thinking || currentModels.execution) {
+      localStorage.setItem('selectedModels', JSON.stringify(currentModels));
+      console.log('✅ Models saved:', currentModels);
+    }
+  }, [currentModels]);
 
   // Fetch current models on mount and when selector closes
   useEffect(() => {
@@ -323,41 +350,55 @@ function IntelligentAssistant() {
   const connectWebSocket = () => {
     // Clear any existing timer before attempting a new connection
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+    
+    // Check if already connecting or connected
+    if (wsRef.current && (wsRef.current.readyState === WebSocket.CONNECTING || wsRef.current.readyState === WebSocket.OPEN)) {
+      return;
+    }
 
-    const ws = new WebSocket(BACKEND_WS);
-    
-    ws.onopen = () => {
-    console.log('Connected to SIGMA-OS Agent System');
-      // Don't add system message on connection - keep it clean!
-      setBackendOnline(true);
-      reconnectAttemptsRef.current = 0; // reset backoff
-    };
-    
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
+    try {
+      const ws = new WebSocket(BACKEND_WS);
       
-      if (data.type === 'connection') {
-        // Don't show connection messages - keep UI clean
-  console.log(`${data.message}`, data.agents);
-      } else if (data.agent_name) {
-        // Agent update
-        handleAgentUpdate(data);
-      }
-    };
-    
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      setBackendOnline(false);
+      ws.onopen = () => {
+        console.log('✅ Connected to SIGMA-OS Agent System');
+        setBackendOnline(true);
+        reconnectAttemptsRef.current = 0; // reset backoff
+      };
+      
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.type === 'connection') {
+            console.log('🔗 Connection confirmed:', data.message);
+          } else if (data.agent_name) {
+            // Agent update
+            handleAgentUpdate(data);
+          }
+        } catch (parseError) {
+          console.error('Failed to parse WebSocket message:', parseError);
+        }
+      };
+      
+      ws.onerror = (error) => {
+        console.error('❌ WebSocket error:', error);
+        setBackendOnline(false);
+      };
+      
+      ws.onclose = (event) => {
+        console.log('⚠️  WebSocket disconnected:', event.code, event.reason);
+        setBackendOnline(false);
+        // Only reconnect if not a normal closure
+        if (event.code !== 1000) {
+          scheduleReconnect();
+        }
+      };
+      
+      wsRef.current = ws;
+    } catch (error) {
+      console.error('Failed to create WebSocket:', error);
       scheduleReconnect();
-    };
-    
-    ws.onclose = () => {
-      console.log('WebSocket disconnected');
-      setBackendOnline(false);
-      scheduleReconnect();
-    };
-    
-    wsRef.current = ws;
+    }
   };
 
   const scheduleReconnect = () => {
@@ -366,10 +407,14 @@ function IntelligentAssistant() {
     const max = 30000; // 30s
     const attempt = Math.min(reconnectAttemptsRef.current + 1, 10);
     reconnectAttemptsRef.current = attempt;
-    const delay = Math.min(base * 2 ** (attempt - 1), max);
+    const delay = Math.min(base * Math.pow(2, attempt - 1), max);
     const jitter = Math.random() * 250; // slight jitter
+    const totalDelay = delay + jitter;
+    
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-    reconnectTimerRef.current = setTimeout(connectWebSocket, delay + jitter);
+    
+    console.log(`⏳ Reconnecting in ${Math.round(totalDelay)}ms (attempt ${attempt})`);
+    reconnectTimerRef.current = setTimeout(connectWebSocket, totalDelay);
   };
 
   const handleAgentUpdate = (update) => {
@@ -391,11 +436,7 @@ function IntelligentAssistant() {
       }]);
     }
 
-    // Show in chat if significant
-    if (update.status === 'success' || update.status === 'error') {
-    const statusLabel = update.status === 'success' ? 'Success' : 'Error';
-    addMessage('agent', `${statusLabel} • ${update.agent_name}: ${update.message}`);
-    }
+    // NOTE: Don't add duplicate messages here - the main response handles it
   };
 
   const addMessage = (type, content, metadata = null) => {
@@ -558,11 +599,33 @@ function IntelligentAssistant() {
           success: true
         };
 
-        // Add success message with expandable details
-        addMessage('assistant', 
-          'Task completed successfully!',
-          metadata
-        );
+        // Generate AI-powered explanation of what happened
+        const explanationPrompt = `You are explaining the results of a completed task to a user in a friendly, clear way.
+
+Task: "${userCommand}"
+Agent Used: ${data.agent_used}
+Results: ${JSON.stringify(data.result.results || data.result)}
+
+Write a brief, natural explanation of what happened (2-3 sentences max). Be conversational and helpful.`;
+
+        try {
+          const explainResponse = await fetch(`${BACKEND_HTTP}/command`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command: explanationPrompt, mode: 'agent' })
+          });
+
+          const explainData = await explainResponse.json();
+          const explanation = explainData.success 
+            ? (explainData.result?.results?.[0]?.output || "Task completed successfully!") 
+            : "Task completed successfully!";
+
+          // Add single comprehensive message
+          addMessage('assistant', explanation, metadata);
+        } catch (err) {
+          // Fallback if explanation fails
+          addMessage('assistant', 'Task completed successfully!', metadata);
+        }
       } else {
         addMessage('error', `Task failed: ${data.result.error || 'Unknown error'}`);
       }
@@ -570,7 +633,7 @@ function IntelligentAssistant() {
       addMessage('error', `Connection error: ${error.message}`);
     } finally {
       setIsProcessing(false);
-      // Keep navbar hidden after task completes - user can click expand button if needed
+      // Keep navbar hidden after task completes
       setAgentStatus({ agent: null, status: 'idle', progress: 0 });
       setCurrentTask(null);
     }
@@ -787,45 +850,96 @@ function IntelligentAssistant() {
       )}
 
       <div className="header">
-        <h1 className="logo-text">
-          <span className="logo-letter">S</span>
-          <span className="logo-letter">I</span>
-          <span className="logo-letter">G</span>
-          <span className="logo-letter">M</span>
-          <span className="logo-letter">A</span>
-          <span className="logo-dash">-</span>
-          <span className="logo-letter">O</span>
-          <span className="logo-letter">S</span>
-        </h1>
-        <p className="subtitle">
-          <span className="subtitle-word">Intelligent</span>{' '}
-          <span className="subtitle-word">AI</span>{' '}
-          <span className="subtitle-word">Agent</span>{' '}
-          <span className="subtitle-word">System</span>
-        </p>
-        <div className="header-controls">
+        <div className="header-top">
+          <h1 className="logo-text">
+            <span className="logo-letter">S</span>
+            <span className="logo-letter">I</span>
+            <span className="logo-letter">G</span>
+            <span className="logo-letter">M</span>
+            <span className="logo-letter">A</span>
+            <span className="logo-dash">-</span>
+            <span className="logo-letter">O</span>
+            <span className="logo-letter">S</span>
+          </h1>
+          <p className="subtitle">
+            <span className="subtitle-word">Intelligent</span>{' '}
+            <span className="subtitle-word">AI</span>{' '}
+            <span className="subtitle-word">Agent</span>{' '}
+            <span className="subtitle-word">System</span>
+          </p>
+        </div>
+
+        <div className="header-bottom">
           {currentModels.thinking && (
             <div className="current-model-display">
-              <span className="model-label-icon" aria-hidden="true">{icons.bolt(14)}</span>
+              <span className="model-label-icon" aria-hidden="true">{icons.bolt(12)}</span>
               <span className="model-label-text">Active:</span>
               <span className="model-value">{currentModels.thinking}</span>
             </div>
           )}
           <button 
-            className="model-selector-button"
-            onClick={() => setShowModelSelector(true)}
-            title="Change AI Model"
+            className="system-status-button"
+            onClick={() => setShowSystemStatus(true)}
+            title="View System Status"
           >
-            <span className="model-button-icon" aria-hidden="true">{icons.robot(16)}</span>
-            <span className="model-button-text">AI Models</span>
+            <span className="status-indicator">●</span>
+            <span className="status-text">System</span>
           </button>
         </div>
       </div>
 
-      {/* Model Selector Modal */}
-      <ModelSelector 
+      {/* Floating Control Buttons - Top Right */}
+      <div className="floating-controls right">
+        <button 
+          className="floating-button models-button"
+          onClick={() => setShowModelSelector(true)}
+          title="Change AI Model"
+        >
+          <span className="floating-icon" aria-hidden="true">{icons.robot(14)}</span>
+          <span className="floating-label">Models</span>
+        </button>
+        <button 
+          className="floating-button keys-button"
+          onClick={() => setShowAPIKeyManager(true)}
+          title="Manage API Keys"
+        >
+          <span className="floating-icon" aria-hidden="true">{icons.key(14)}</span>
+          <span className="floating-label">Keys</span>
+        </button>
+      </div>
+
+      {/* Advanced Model Selector Modal */}
+      <AdvancedModelSelector 
         isOpen={showModelSelector} 
-        onClose={() => setShowModelSelector(false)} 
+        onClose={() => setShowModelSelector(false)}
+        onModelSelect={(models) => {
+          console.log('✅ Models selected:', models);
+          setCurrentModels(models);
+          fetchCurrentModels();
+        }}
+        currentModels={currentModels}
+      />
+
+      {/* Advanced API Key Manager Modal */}
+      <AdvancedAPIKeyManager 
+        isOpen={showAPIKeyManager}
+        onClose={() => {
+          setShowAPIKeyManager(false);
+          // Refresh models after closing
+          fetchCurrentModels();
+        }}
+        onVerified={() => {
+          console.log('✅ API key verified');
+          fetchCurrentModels();
+        }}
+      />
+
+      {/* System Status Modal */}
+      <SystemStatusModal 
+        isOpen={showSystemStatus}
+        onClose={() => setShowSystemStatus(false)}
+        selectedModels={currentModels}
+        isConnected={backendOnline}
       />
 
       {/* Backend connectivity banner */}
@@ -973,7 +1087,7 @@ function IntelligentAssistant() {
             </div>
             <div className="message-content">
               {msg.type === 'assistant' && msg.metadata ? (
-                // Rich task display - SHOW MAIN OUTPUT FIRST
+                // Rich task display with advanced output renderer
                 <div className="task-result">
                   <div className="task-summary">
                     <h3>{msg.content}</h3>
@@ -989,35 +1103,39 @@ function IntelligentAssistant() {
                     </div>
                   </div>
 
-                  {/* MAIN OUTPUT - Show directly (not hidden) */}
+                  {/* MAIN OUTPUT - Beautifully rendered with OutputRenderer */}
                   {msg.metadata.results && msg.metadata.results.length > 0 && (
                     <div className="main-output">
-                      <h4>
-                        <span className="inline-icon" aria-hidden="true">{icons.document(16)}</span>
-                        Output:
-                      </h4>
                       {msg.metadata.results.map((result, idx) => (
                         <div key={idx} className="output-item">
-                          {result.output && (
-                            <pre className="output-text">{result.output}</pre>
-                          )}
-                          {result.command && !result.output && (
-                            <div className="command-executed">
-                              <code>{result.command}</code>
-                              <span className={`status-indicator ${result.success ? 'success' : 'failed'}`}>
-                                <span className="inline-icon" aria-hidden="true">
-                                  {result.success ? icons.success(14) : icons.error(14)}
-                                </span>
-                                {result.success ? 'Success' : 'Failed'}
-                              </span>
-                            </div>
+                          {/* Check if we have a formatted_response */}
+                          {result.formatted_response ? (
+                            <OutputRenderer response={result.formatted_response} command={result.command} />
+                          ) : (
+                            // Fallback to plain output
+                            <>
+                              {result.output && (
+                                <pre className="output-text">{result.output}</pre>
+                              )}
+                              {result.command && !result.output && (
+                                <div className="command-executed">
+                                  <code>{result.command}</code>
+                                  <span className={`status-indicator ${result.success ? 'success' : 'failed'}`}>
+                                    <span className="inline-icon" aria-hidden="true">
+                                      {result.success ? icons.success(14) : icons.error(14)}
+                                    </span>
+                                    {result.success ? 'Success' : 'Failed'}
+                                  </span>
+                                </div>
+                              )}
+                            </>
                           )}
                         </div>
                       ))}
                     </div>
                   )}
 
-                  {/* Expandable Details Section - Hide technical stuff */}
+                  {/* Expandable Details Section */}
                   <div className="task-expand-container">
                     <button 
                       className="expand-button"

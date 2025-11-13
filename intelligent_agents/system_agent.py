@@ -14,6 +14,7 @@ import platform
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from .agent_core import IntelligentAgent, AgentStatus
+from .output_formatter import format_output, OutputFormatter
 
 class ContextAwareEngine:
     """
@@ -619,8 +620,9 @@ Command:"""
                 self.context_engine.set_cwd(new_dir)
             
             if result.returncode == 0:
-                # Format output for display
-                display_output = output if output else "(command completed with no output)"
+                # Format output beautifully using AI-powered formatter
+                formatted_response = format_output(output, command, success=True)
+                display_output = formatted_response.get("explanation", output if output else "(command completed with no output)")
                 
                 self._send_update(
                     AgentStatus.EXECUTING,
@@ -631,6 +633,7 @@ Command:"""
                     "success": True,
                     "command": command,
                     "output": output,
+                    "formatted_response": formatted_response,
                     "formatted_output": display_output,
                     "error": error if error else None,
                     "action": action,

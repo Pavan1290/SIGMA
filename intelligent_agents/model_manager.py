@@ -117,6 +117,19 @@ class ModelManager:
                 rate_limit=None,  # Unlimited - runs locally
                 api_key_env=""
             ),
+            
+            # OpenAI (GPT-4, GPT-3.5, etc.)
+            "openai-gpt4": AIModel(
+                id="openai-gpt4",
+                name="GPT-4 Turbo",
+                provider="openai",
+                model_name="gpt-4-turbo-preview",
+                description="🧠 Advanced reasoning and analysis",
+                capabilities=["reasoning", "code", "chat", "vision"],
+                cost_per_1m=0.01,
+                rate_limit=None,
+                api_key_env="OPENAI_API_KEY"
+            ),
         }
         
         # Check which models are actually available (have API keys)
@@ -126,11 +139,26 @@ class ModelManager:
         self._set_defaults()
     
     def _check_availability(self):
-        """Check which models have valid API keys"""
+        """Check which models have valid API keys (reads from .env dynamically)"""
+        from pathlib import Path
+        import re
+        
+        # Load .env file dynamically to catch recently saved keys
+        env_path = Path(__file__).parent.parent / ".env"
+        env_vars = {}
+        if env_path.exists():
+            with open(env_path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and '=' in line and not line.startswith('#'):
+                        key, val = line.split('=', 1)
+                        env_vars[key.strip()] = val.strip()
+        
         for model_id, model in self.available_models.items():
             if model.api_key_env:
-                api_key = os.getenv(model.api_key_env)
-                model.available = bool(api_key)
+                # Check both os.getenv and .env file
+                api_key = env_vars.get(model.api_key_env) or os.getenv(model.api_key_env)
+                model.available = bool(api_key and api_key.strip())
             else:
                 # Ollama - check if server is running
                 if model.provider == "ollama":
