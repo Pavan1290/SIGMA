@@ -391,9 +391,11 @@ Extract the search query (just the item/topic, 1-3 words):"""
         try:
             # Check Puppeteer service
             if not self._check_puppeteer_service():
-                raise Exception(
-                    "Puppeteer service not running. Start it with: npm run dev or ./start.sh"
-                )
+                return self._finalize_result(task, {
+                    "success": False,
+                    "data": "⚠️ Puppeteer service not running",
+                    "message": "Please run 'bash start.sh' to start all services including Puppeteer web automation."
+                })
             
             task_lower = task.lower()
             
