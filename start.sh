@@ -33,7 +33,9 @@ fi
 # Start backend
 echo "🔧 Starting backend server..."
 source .venv/bin/activate
-python backend/app.py > backend.log 2>&1 &
+
+# Start backend with output to both terminal and log file
+python -u backend/app.py 2>&1 | tee backend.log &
 BACKEND_PID=$!
 
 echo "   Backend PID: $BACKEND_PID"
@@ -47,7 +49,7 @@ fi
 
 # Start frontend
 echo "🎨 Starting frontend server..."
-npm run dev > frontend.log 2>&1 &
+npm run dev 2>&1 | tee frontend.log &
 FRONTEND_PID=$!
 
 echo "   Frontend PID: $FRONTEND_PID"
@@ -60,6 +62,9 @@ if ! ps -p $FRONTEND_PID > /dev/null; then
     exit 1
 fi
 
+# Trap Ctrl+C to cleanup
+trap "echo ''; echo ''; echo '🛑 Stopping services...'; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; pkill -9 -f 'backend/app.py' 2>/dev/null; pkill -9 -f 'vite' 2>/dev/null; echo '✅ All services stopped'; exit 0" INT
+
 echo ""
 echo "✅ SIGMA-OS is running successfully!"
 echo ""
@@ -67,14 +72,10 @@ echo "📍 Frontend: http://localhost:5173"
 echo "📍 Backend:  http://localhost:5000"
 echo "📍 WebSocket: ws://localhost:5000/ws"
 echo ""
-echo "📋 Logs:"
-echo "   Backend:  tail -f backend.log"
-echo "   Frontend: tail -f frontend.log"
-echo ""
-echo "🛑 Press Ctrl+C to stop all services"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "� BACKEND OUTPUT (Real-time):"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# Wait for Ctrl+C
-trap "echo ''; echo '🛑 Stopping services...'; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; pkill -9 -f 'backend/app.py' 2>/dev/null; pkill -9 -f 'vite' 2>/dev/null; echo '✅ All services stopped'; exit 0" INT
-
-wait
+# Follow backend log in real-time (frontend runs silently in background)
+tail -f backend.log

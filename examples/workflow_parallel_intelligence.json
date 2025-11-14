@@ -1,0 +1,28 @@
+{
+  "name": "Multi-Source Intelligence Gathering",
+  "description": "Collect information from web, email, and system simultaneously",
+  "parallel": true,
+  "steps": [
+    {
+      "id": "web_research",
+      "command": "search for latest technology news",
+      "agent": "web",
+      "retry_count": 2,
+      "timeout": 120
+    },
+    {
+      "id": "email_check",
+      "command": "check for unread emails",
+      "agent": "email",
+      "retry_count": 2,
+      "timeout": 60
+    },
+    {
+      "id": "system_status",
+      "command": "get current system status and running processes",
+      "agent": "system",
+      "retry_count": 2,
+      "timeout": 30
+    }
+  ]
+}

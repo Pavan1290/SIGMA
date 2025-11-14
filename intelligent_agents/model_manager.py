@@ -172,15 +172,22 @@ class ModelManager:
                         model.available = False
     
     def _set_defaults(self):
-        """Set default models based on availability"""
-        # Try to set thinking model - prefer Groq Llama 3.3 70B
-        for model_id in ["groq-llama-3.3-70b", "gemini-2.0-flash", "ollama-llama3.2"]:
+        """Set default models based on availability - ALWAYS prefer Groq for speed"""
+        # PRIORITY ORDER: Groq (fastest) > Gemini > Ollama (local)
+        priority_order = ["groq-llama-3.3-70b", "gemini-2.0-flash", "ollama-llama3.2", "openai-gpt4"]
+        
+        for model_id in priority_order:
             if model_id in self.available_models and self.available_models[model_id].available:
                 self.current_thinking_model = model_id
+                self.current_execution_model = model_id  # Use same model for speed
+                print(f"🚀 Using {self.available_models[model_id].name} for maximum speed")
                 break
         
-        # Set SAME model for execution (simplicity!)
-        self.current_execution_model = self.current_thinking_model
+        if not self.current_thinking_model:
+            print("⚠️  No AI models available! Please set API keys in .env")
+            # Set to groq anyway so frontend can configure it
+            self.current_thinking_model = "groq-llama-3.3-70b"
+            self.current_execution_model = "groq-llama-3.3-70b"
     
     def get_available_models(self) -> List[Dict]:
         """Get list of all available models"""

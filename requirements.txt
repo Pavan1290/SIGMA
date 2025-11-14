@@ -125,3 +125,7 @@ spacy-legacy==3.0.12
 spacy-loggers==1.0.5
 language_data==1.3.0
 marisa-trie==1.3.1
+
+# Advanced Automation System
+SQLAlchemy==2.0.23
+alembic==1.13.1

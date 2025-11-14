@@ -381,12 +381,18 @@ function IntelligentAssistant() {
       };
       
       ws.onerror = (error) => {
-        console.error('❌ WebSocket error:', error);
+        // Only log real errors, not React StrictMode test disconnects
+        if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+          console.warn('WebSocket error (may be normal in dev mode)');
+        }
         setBackendOnline(false);
       };
       
       ws.onclose = (event) => {
-        console.log('⚠️  WebSocket disconnected:', event.code, event.reason);
+        // Only log if it's not a React StrictMode cleanup (code 1006 on first mount)
+        if (event.code !== 1000 && reconnectAttemptsRef.current > 0) {
+          console.log('⚠️  WebSocket disconnected, reconnecting...');
+        }
         setBackendOnline(false);
         // Only reconnect if not a normal closure
         if (event.code !== 1000) {
@@ -413,7 +419,10 @@ function IntelligentAssistant() {
     
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
     
-    console.log(`⏳ Reconnecting in ${Math.round(totalDelay)}ms (attempt ${attempt})`);
+    // Only log if this is a real reconnect attempt (not React StrictMode cleanup)
+    if (attempt > 1) {
+      console.log(`⏳ Reconnecting... (attempt ${attempt})`);
+    }
     reconnectTimerRef.current = setTimeout(connectWebSocket, totalDelay);
   };
 
@@ -586,51 +595,92 @@ function IntelligentAssistant() {
         body: JSON.stringify({ command: userCommand, mode: 'agent' })
       });
 
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
       const data = await response.json();
 
       if (data.success) {
+        // Extract formatted output from response
+        const formattedOutput = data.result?.formatted_output || {
+          type: 'text',
+          success: true,
+          content: 'Task completed successfully!',
+          explanation: 'The task has been executed.'
+        };
+
         // Create rich metadata for the task
         const metadata = {
-          agent: data.agent_used,
-          reasoning: data.thinking_process,
-          plan: data.result.plan,
-          results: data.result.results,
-          task: data.result.task,
+          agent: data.agent_used || data.result?.agent_used || 'unknown',
+          reasoning: data.thinking_process || data.result?.reasoning,
+          plan: data.result?.plan || { understanding: 'Completed', approach: 'Using intelligent agents' },
+          results: [{
+            command: userCommand,
+            output: formattedOutput.raw_output || formattedOutput.content || '',
+            formatted_response: formattedOutput,
+            success: data.success,
+            exit_code: 0
+          }],
+          task: userCommand,
           success: true
         };
 
-        // Generate AI-powered explanation of what happened
-        const explanationPrompt = `You are explaining the results of a completed task to a user in a friendly, clear way.
-
-Task: "${userCommand}"
-Agent Used: ${data.agent_used}
-Results: ${JSON.stringify(data.result.results || data.result)}
-
-Write a brief, natural explanation of what happened (2-3 sentences max). Be conversational and helpful.`;
-
-        try {
-          const explainResponse = await fetch(`${BACKEND_HTTP}/command`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ command: explanationPrompt, mode: 'agent' })
-          });
-
-          const explainData = await explainResponse.json();
-          const explanation = explainData.success 
-            ? (explainData.result?.results?.[0]?.output || "Task completed successfully!") 
-            : "Task completed successfully!";
-
-          // Add single comprehensive message
-          addMessage('assistant', explanation, metadata);
-        } catch (err) {
-          // Fallback if explanation fails
-          addMessage('assistant', 'Task completed successfully!', metadata);
-        }
+        // Add single comprehensive message with formatting
+        addMessage('assistant', formattedOutput.explanation || 'Task completed successfully!', metadata);
       } else {
-        addMessage('error', `Task failed: ${data.result.error || 'Unknown error'}`);
+        const errorOutput = data.result?.formatted_output || {
+          type: 'error',
+          success: false,
+          error_type: 'execution_error',
+          message: data.result?.error || 'Unknown error occurred',
+          details: data.result?.error,
+          suggestions: ['Check command syntax', 'Verify backend is running'],
+          raw_output: data.result?.error
+        };
+
+        const errorMetadata = {
+          agent: data.agent_used || 'unknown',
+          reasoning: data.thinking_process,
+          results: [{
+            command: userCommand,
+            output: data.result?.error || '',
+            formatted_response: errorOutput,
+            success: false,
+            exit_code: 1
+          }],
+          task: userCommand,
+          success: false
+        };
+
+        addMessage('error', errorOutput.message, errorMetadata);
       }
     } catch (error) {
-      addMessage('error', `Connection error: ${error.message}`);
+      console.error('Fetch error:', error);
+      
+      const errorMetadata = {
+        agent: null,
+        reasoning: `Connection error: ${error.message}`,
+        results: [{
+          command: userCommand,
+          output: error.message,
+          formatted_response: {
+            type: 'error',
+            success: false,
+            error_type: 'connection_error',
+            message: `Connection error: ${error.message}`,
+            details: error.message,
+            suggestions: ['Check if backend is running on http://localhost:5000', 'Check your internet connection'],
+            raw_output: error.message
+          },
+          success: false,
+          exit_code: -1
+        }],
+        task: userCommand,
+        success: false
+      };
+
+      addMessage('error', `Connection error: ${error.message}`, errorMetadata);
     } finally {
       setIsProcessing(false);
       // Keep navbar hidden after task completes

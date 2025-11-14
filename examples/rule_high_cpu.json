@@ -1,0 +1,25 @@
+{
+  "name": "High CPU Alert",
+  "type": "threshold",
+  "priority": 1,
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "cpu_percent",
+      "operator": ">",
+      "value": 85,
+      "source": "metrics"
+    }
+  ],
+  "actions": [
+    {
+      "type": "alert",
+      "message": "CPU usage exceeded 85%!",
+      "severity": "warning"
+    },
+    {
+      "type": "log",
+      "message": "High CPU usage detected"
+    }
+  ]
+}

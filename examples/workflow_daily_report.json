@@ -1,0 +1,44 @@
+{
+  "name": "Daily System Report",
+  "description": "Generate and email daily system health report",
+  "parallel": false,
+  "steps": [
+    {
+      "id": "collect_cpu",
+      "command": "get CPU usage statistics",
+      "agent": "system",
+      "retry_count": 3,
+      "timeout": 30
+    },
+    {
+      "id": "collect_memory",
+      "command": "get memory usage statistics",
+      "agent": "system",
+      "retry_count": 3,
+      "timeout": 30
+    },
+    {
+      "id": "collect_disk",
+      "command": "get disk usage statistics",
+      "agent": "system",
+      "retry_count": 3,
+      "timeout": 30
+    },
+    {
+      "id": "generate_report",
+      "command": "create a system health report with all collected data",
+      "agent": "system",
+      "depends_on": ["collect_cpu", "collect_memory", "collect_disk"],
+      "retry_count": 2,
+      "timeout": 60
+    },
+    {
+      "id": "email_report",
+      "command": "email the system health report to admin@company.com",
+      "agent": "email",
+      "depends_on": ["generate_report"],
+      "retry_count": 3,
+      "timeout": 120
+    }
+  ]
+}

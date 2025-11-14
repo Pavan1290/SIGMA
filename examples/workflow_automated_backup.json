@@ -1,0 +1,38 @@
+{
+  "name": "Automated Backup Workflow",
+  "description": "Backup important files and send confirmation",
+  "parallel": false,
+  "steps": [
+    {
+      "id": "list_files",
+      "command": "list all files in Documents folder",
+      "agent": "system",
+      "retry_count": 2,
+      "timeout": 30
+    },
+    {
+      "id": "create_archive",
+      "command": "create a zip archive of the Documents folder",
+      "agent": "system",
+      "depends_on": ["list_files"],
+      "retry_count": 3,
+      "timeout": 120
+    },
+    {
+      "id": "verify_backup",
+      "command": "verify the backup archive was created successfully",
+      "agent": "system",
+      "depends_on": ["create_archive"],
+      "retry_count": 2,
+      "timeout": 30
+    },
+    {
+      "id": "send_confirmation",
+      "command": "email backup confirmation to admin@company.com",
+      "agent": "email",
+      "depends_on": ["verify_backup"],
+      "retry_count": 2,
+      "timeout": 60
+    }
+  ]
+}

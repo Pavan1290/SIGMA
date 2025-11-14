@@ -1,0 +1,35 @@
+{
+  "name": "Workflow Failure Escalation",
+  "type": "trigger",
+  "priority": 2,
+  "enabled": true,
+  "conditions": [
+    {
+      "field": "workflow.status",
+      "operator": "==",
+      "value": "failed",
+      "source": "context"
+    },
+    {
+      "field": "workflow.failure_count",
+      "operator": ">=",
+      "value": 3,
+      "source": "context"
+    }
+  ],
+  "actions": [
+    {
+      "type": "pause_workflow"
+    },
+    {
+      "type": "alert",
+      "message": "Workflow failed 3 times, pausing execution",
+      "severity": "critical"
+    },
+    {
+      "type": "notify",
+      "channel": "email",
+      "recipient": "admin@company.com"
+    }
+  ]
+}

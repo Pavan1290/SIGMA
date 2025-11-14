@@ -1,0 +1,22 @@
+{
+  "name": "Screenshot & Share",
+  "description": "Take screenshot and share via multiple channels",
+  "parallel": false,
+  "steps": [
+    {
+      "id": "take_screenshot",
+      "command": "take a screenshot of the current screen",
+      "agent": "system",
+      "retry_count": 3,
+      "timeout": 30
+    },
+    {
+      "id": "email_screenshot",
+      "command": "email the screenshot to team@company.com with subject 'Daily Screenshot'",
+      "agent": "email",
+      "depends_on": ["take_screenshot"],
+      "retry_count": 2,
+      "timeout": 60
+    }
+  ]
+}

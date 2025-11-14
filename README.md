@@ -6,6 +6,21 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-green)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+## ⚡ Quick Start for Maximum Speed
+
+**Want blazing fast performance? Just add your Groq API key!**
+
+1. Get a FREE Groq API key: https://console.groq.com/keys
+2. Add to `.env`:
+   ```bash
+   GROQ_API_KEY=your_groq_key_here
+   ```
+3. Run: `./start.sh`
+
+**That's it!** SIGMA-OS will automatically use Groq (fastest AI model available) for ultra-fast responses. You can always switch models from the UI if needed.
+
+---
+
 ## ✨ Key Features
 
 ### 🤖 Intelligent Agents
@@ -21,11 +36,12 @@ Exposes all agent capabilities as standardized MCP tools for integration with Cl
 - Structured response formatting
 
 ### 🧠 Multi-Model AI Support
+
+- **Groq Llama 3.3 70B**: ⚡ FASTEST option - FREE & lightning-fast responses (Recommended Default)
 - **Google Gemini 2.0 Flash**: Experimental, ultra-fast reasoning
-- **Groq Llama 3.3 70B**: Lightning-fast inference (free tier)
-- **OpenAI GPT-4**: Professional-grade responses
-- **Anthropic Claude**: Advanced reasoning capabilities
-- **Ollama**: Local models (privacy-focused)
+- **OpenAI GPT-4**: Advanced reasoning with tool usage
+- **Anthropic Claude 3.5 Sonnet**: Superior analytical capabilities  
+- **Ollama (Local)**: Privacy-first, runs on your machine
 
 ### 📊 Advanced Output Formatting
 Intelligently transforms command output into beautiful, structured, interactive responses:
