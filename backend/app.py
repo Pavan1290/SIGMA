@@ -41,6 +41,15 @@ from intelligent_agents import SystemAgent, EmailAgent, WebAgent, AgentStatus, A
 from intelligent_agents.model_manager import model_manager
 from intelligent_agents.output_formatter import format_output
 
+# Import Atlas-style workflow engine
+try:
+    from intelligent_agents.workflow_engine import AtlasWorkflowEngine
+    WORKFLOW_ENGINE_AVAILABLE = True
+    print("✅ Atlas workflow engine loaded", flush=True)
+except ImportError:
+    WORKFLOW_ENGINE_AVAILABLE = False
+    print("⚠️  Workflow engine not available", flush=True)
+
 print("✅ All imports loaded successfully (using unified system agent)", flush=True)
 
 # FastAPI setup
@@ -57,6 +66,7 @@ app.add_middleware(
 
 # Global state
 agents = {}
+workflow_engine = None
 active_websockets: List[WebSocket] = []
 
 # Models
@@ -96,6 +106,13 @@ def init_agents():
     print("   Creating Web Agent...", flush=True)
     agents['web'] = WebAgent(update_callback=broadcast_update)
     print("   ✅ Web Agent ready", flush=True)
+    
+    # Initialize workflow engine
+    if WORKFLOW_ENGINE_AVAILABLE:
+        global workflow_engine
+        workflow_engine = AtlasWorkflowEngine(agents=agents)
+        print("   Creating Atlas Workflow Engine...", flush=True)
+        print("   ✅ Workflow Engine ready", flush=True)
     
     print("\n✅ All agents initialized successfully!", flush=True)
     print("="*80 + "\n", flush=True)
