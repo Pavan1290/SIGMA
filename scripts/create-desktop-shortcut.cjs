@@ -5,11 +5,13 @@ const { execFileSync } = require("child_process");
 
 const projectRoot = path.resolve(__dirname, "..");
 const desktopPath = path.join(os.homedir(), "Desktop");
-const releasePath = path.join(projectRoot, "release");
+const releaseDirName = process.env.SIGMA_RELEASE_DIR || "release";
+const releasePath = path.join(projectRoot, releaseDirName);
 const logoPath = path.join(projectRoot, "logo.png");
 const logoIconPath = path.join(__dirname, "logo.ico");
 const shortcutName = "\u00a0";
 const blankOverlayIconPath = path.join(__dirname, "blank-overlay.ico");
+const shortcutMode = process.env.SIGMA_SHORTCUT_MODE || "packaged";
 
 const transparentPngBase64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/S3QAAAAASUVORK5CYII=";
@@ -89,7 +91,13 @@ const ensureLogoIcon = () => {
   }
 
   if (fs.existsSync(logoIconPath)) {
-    return logoIconPath;
+    const logoStats = fs.statSync(logoPath);
+    const iconStats = fs.statSync(logoIconPath);
+
+    // Refresh icon if source logo changed.
+    if (iconStats.mtimeMs >= logoStats.mtimeMs) {
+      return logoIconPath;
+    }
   }
 
   const pythonCode = [
@@ -109,45 +117,107 @@ const ensureLogoIcon = () => {
 };
 
 const getPackagedAppPath = () => {
+  const releaseRoots = [
+    releasePath,
+    path.join(projectRoot, "release-fixed"),
+  ].filter((candidate, index, values) => values.indexOf(candidate) === index);
+
   if (process.platform === "win32") {
-    return findFirstMatch(path.join(releasePath, "win-unpacked"), (filePath) =>
-      filePath.toLowerCase().endsWith(".exe"),
-    );
+    for (const releaseRoot of releaseRoots) {
+      const match = findFirstMatch(
+        path.join(releaseRoot, "win-unpacked"),
+        (filePath) => filePath.toLowerCase().endsWith(".exe"),
+      );
+      if (match) {
+        return match;
+      }
+    }
+    return null;
   }
 
   if (process.platform === "linux") {
-    const appImage = findFirstMatch(releasePath, (filePath) =>
-      filePath.endsWith(".AppImage"),
-    );
-    if (appImage) {
-      return appImage;
+    for (const releaseRoot of releaseRoots) {
+      const appImage = findFirstMatch(releaseRoot, (filePath) =>
+        filePath.endsWith(".AppImage"),
+      );
+      if (appImage) {
+        return appImage;
+      }
+
+      const unpacked = findFirstMatch(
+        path.join(releaseRoot, "linux-unpacked"),
+        (filePath) => {
+          return (
+            !filePath.endsWith(".desktop") &&
+            fs.existsSync(filePath) &&
+            fs.statSync(filePath).mode & 0o111
+          );
+        },
+      );
+
+      if (unpacked) {
+        return unpacked;
+      }
     }
 
-    return findFirstMatch(
-      path.join(releasePath, "linux-unpacked"),
-      (filePath) => {
-        return (
-          !filePath.endsWith(".desktop") &&
-          fs.existsSync(filePath) &&
-          fs.statSync(filePath).mode & 0o111
-        );
-      },
-    );
+    return null;
   }
 
   return null;
 };
 
-const createWindowsShortcut = (targetPath) => {
+const getSourceElectronTarget = () => {
+  if (process.platform === "win32") {
+    const target = path.join(
+      projectRoot,
+      "node_modules",
+      "electron",
+      "dist",
+      "electron.exe",
+    );
+    if (fs.existsSync(target)) {
+      return {
+        targetPath: target,
+        arguments: ".",
+        workingDirectory: projectRoot,
+      };
+    }
+  }
+
+  if (process.platform === "linux") {
+    const target = path.join(
+      projectRoot,
+      "node_modules",
+      "electron",
+      "dist",
+      "electron",
+    );
+    if (fs.existsSync(target)) {
+      return {
+        targetPath: target,
+        arguments: ".",
+        workingDirectory: projectRoot,
+      };
+    }
+  }
+
+  return null;
+};
+
+const createWindowsShortcut = (
+  targetPath,
+  args = "",
+  workingDirectory = path.dirname(targetPath),
+) => {
   const shortcutPath = path.join(desktopPath, `${shortcutName}.lnk`);
-  ensureLogoIcon();
-  const iconLocation = targetPath;
+  const iconLocation = ensureLogoIcon();
 
   const script = [
     "$ws = New-Object -ComObject WScript.Shell",
     `$shortcut = $ws.CreateShortcut('${shortcutPath.replace(/'/g, "''")}')`,
     `$shortcut.TargetPath = '${targetPath.replace(/'/g, "''")}';`,
-    `$shortcut.WorkingDirectory = '${path.dirname(targetPath).replace(/'/g, "''")}';`,
+    `$shortcut.Arguments = '${args.replace(/'/g, "''")}';`,
+    `$shortcut.WorkingDirectory = '${workingDirectory.replace(/'/g, "''")}';`,
     `$shortcut.IconLocation = '${iconLocation.replace(/'/g, "''")},0';`,
     "$shortcut.Save()",
   ].join("; ");
@@ -193,13 +263,19 @@ const removeWindowsShortcutArrowOverlay = () => {
   }
 };
 
-const createLinuxShortcut = (targetPath) => {
+const createLinuxShortcut = (
+  targetPath,
+  args = "",
+  workingDirectory = projectRoot,
+) => {
   const shortcutPath = path.join(desktopPath, `${shortcutName}.desktop`);
+  const execValue = args.trim() ? `"${targetPath}" ${args}` : `"${targetPath}"`;
   const contents = [
     "[Desktop Entry]",
     "Type=Application",
     `Name=${shortcutName}`,
-    `Exec="${targetPath}"`,
+    `Exec=${execValue}`,
+    `Path=${workingDirectory}`,
     `Icon=${logoPath}`,
     "Terminal=false",
     "Categories=Utility;Application;",
@@ -215,17 +291,38 @@ try {
   removePreviousShortcuts();
 
   const packagedAppPath = getPackagedAppPath();
-  if (!packagedAppPath) {
+  const sourceTarget = getSourceElectronTarget();
+
+  const launchTarget =
+    shortcutMode === "source"
+      ? sourceTarget
+      : packagedAppPath
+        ? {
+            targetPath: packagedAppPath,
+            arguments: "",
+            workingDirectory: path.dirname(packagedAppPath),
+          }
+        : sourceTarget;
+
+  if (!launchTarget) {
     throw new Error(
-      "Packaged app not found. Run `npm run electron:pack` first.",
+      "No launch target found. Build packaged app or install dependencies for source mode.",
     );
   }
 
   if (process.platform === "win32") {
-    createWindowsShortcut(packagedAppPath);
+    createWindowsShortcut(
+      launchTarget.targetPath,
+      launchTarget.arguments,
+      launchTarget.workingDirectory,
+    );
     removeWindowsShortcutArrowOverlay();
   } else if (process.platform === "linux") {
-    createLinuxShortcut(packagedAppPath);
+    createLinuxShortcut(
+      launchTarget.targetPath,
+      launchTarget.arguments,
+      launchTarget.workingDirectory,
+    );
   } else {
     throw new Error(`Unsupported platform: ${process.platform}`);
   }
