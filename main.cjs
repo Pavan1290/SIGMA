@@ -851,6 +851,7 @@ if (!requestSingleInstanceLock()) {
 app.whenReady().then(async () => {
   registerIpcHandlers();
   await createLauncherWindow();
+  await createPanelWindow();
 
   screen.on("display-metrics-changed", () => {
     positionLauncherWindow();
