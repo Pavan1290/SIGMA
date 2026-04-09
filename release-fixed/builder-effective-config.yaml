@@ -1,0 +1,32 @@
+directories:
+  output: release-fixed
+  buildResources: build
+appId: com.sigma.os
+productName: SIGMA_OS
+asar: true
+asarUnpack:
+  - backend/**
+  - intelligent_agents/**
+files:
+  - filter:
+      - dist/**/*
+      - main.cjs
+      - logo.png
+      - package.json
+      - backend/**/*
+      - intelligent_agents/**/*
+extraResources:
+  - from: logo.png
+    to: logo.png
+win:
+  target: nsis
+  icon: logo.png
+nsis:
+  shortcutName: SIGMA_OS
+  createDesktopShortcut: true
+linux:
+  target:
+    - AppImage
+  icon: logo.png
+  category: Utility
+electronVersion: 26.6.10

@@ -1,0 +1,4 @@
+release/**/*.exe filter=lfs diff=lfs merge=lfs -text
+release//*.exe filter=lfs diff=lfs merge=lfs -text
+release-fixed//*.exe filter=lfs diff=lfs merge=lfs -text
+release-fixed/**/*.exe filter=lfs diff=lfs merge=lfs -text
