@@ -15,6 +15,7 @@ Features:
 import os
 import json
 import time
+import re
 import subprocess
 import shutil
 import platform
@@ -165,6 +166,13 @@ class ContextAwareEngine:
     def resolve_path(self, path_hint: str) -> str:
         """Intelligently resolve a path from various hints"""
         path_hint = path_hint.strip()
+
+        # Expand ~ and environment variables first
+        expanded = os.path.expanduser(os.path.expandvars(path_hint))
+
+        # If absolute path is explicitly provided, preserve it as-is.
+        if os.path.isabs(expanded):
+            return expanded
         
         # Handle special keywords
         keywords = {
@@ -187,13 +195,6 @@ class ContextAwareEngine:
         for keyword, path in keywords.items():
             if keyword in path_lower:
                 return path
-        
-        # Expand ~ and environment variables
-        expanded = os.path.expanduser(os.path.expandvars(path_hint))
-        
-        # If absolute path, use it
-        if os.path.isabs(expanded):
-            return expanded
         
         # If relative, join with cwd
         return os.path.join(self.cwd, expanded)
@@ -356,7 +357,8 @@ class SystemAgent(IntelligentAgent):
                 return {'success': bool(res.get('success')), 'result': res}
 
         # ========== HEALTH CHECK / DIAGNOSTICS ==========
-        if any(word in task_lower for word in ['health check', 'diagnose', 'diagnostics', 'system check', 'system diagnose', 'run health check']):
+        if any(word in task_lower for word in ['health check', 'diagnose', 'diagnostics', 'system check', 'system diagnose', 'run health check']) \
+            and not ('create' in task_lower and any(w in task_lower for w in ['file', 'code', 'script'])):
             return self.health_check(full_context)
 
         if any(word in task_lower for word in ['monitor system', 'start monitoring', 'start monitor']):
@@ -450,7 +452,7 @@ class SystemAgent(IntelligentAgent):
             else:
                 return self._shell_fast("ipconfig", task)
         
-        if any(word in task_lower for word in ['ping', 'test connection', 'check connection']):
+        if any(word in task_lower for word in ['ping', 'test connection', 'check connection', 'network connectivity', 'check network', 'connectivity test']):
             target = 'google.com'
             words = task_lower.split()
             for word in words:
@@ -749,19 +751,295 @@ class SystemAgent(IntelligentAgent):
             return {"success": False, "error": str(e), "results": []}
     
     def _create_file_fast(self, filepath: str, original_task: str) -> Dict[str, Any]:
-        """Create file quickly"""
+        """Create file quickly, optionally with inferred content from natural-language task."""
         try:
             Path(filepath).parent.mkdir(parents=True, exist_ok=True)
-            Path(filepath).touch(exist_ok=True)
+            inferred_content = self._infer_file_content_from_task(original_task, filepath)
+
+            task_lower = original_task.lower()
+            code_request = bool(re.search(r"\b(add|write|implement|create|generate|build)\b", task_lower)) and (
+                bool(re.search(r"\b(code|script|program)\b", task_lower))
+                or bool(re.search(r"add\s+.+\s+(?:in it|on it|to it)", task_lower))
+                or Path(filepath).suffix.lower() in {
+                    ".py", ".js", ".ts", ".java", ".c", ".cpp", ".cc", ".cxx", ".cs",
+                    ".go", ".rs", ".php", ".rb", ".kt", ".swift", ".sh", ".bash", ".html",
+                    ".css", ".sql", ".json", ".yml", ".yaml", ".md", ".ex", ".exs"
+                }
+            )
+
+            if code_request and not inferred_content:
+                # One additional direct model attempt to avoid blank/stale files.
+                language_hint = Path(filepath).suffix.lstrip('.').lower() or "text"
+                inferred_content = self._generate_code_dynamically(
+                    task=original_task,
+                    filepath=filepath,
+                    language=language_hint,
+                    topic="general"
+                )
+
+            if inferred_content:
+                Path(filepath).write_text(inferred_content)
+                output_msg = f"File created with content: {filepath}"
+                command_msg = f"create+write file {filepath}"
+            else:
+                if code_request:
+                    # Clear stale content if file existed and model returned no code.
+                    Path(filepath).write_text("")
+                    output_msg = f"File created but model returned no code: {filepath}"
+                    command_msg = f"create file (empty after model miss) {filepath}"
+                else:
+                    Path(filepath).touch(exist_ok=True)
+                    output_msg = f"File created: {filepath}"
+                    command_msg = f"create file {filepath}"
             
             return {
                 "success": True,
-                "results": [{"command": f"create file {filepath}", "output": f"File created: {filepath}", "success": True}],
+                "results": [{"command": command_msg, "output": output_msg, "success": True}],
                 "task": original_task,
-                "plan": {"understanding": f"Create file at {filepath}"}
+                "plan": {"understanding": f"Create file at {filepath}"},
+                "path": filepath,
+                "content_written": bool(inferred_content),
+                "bytes_written": len(inferred_content) if inferred_content else 0
             }
         except Exception as e:
             return {"success": False, "error": str(e), "results": []}
+
+    def _infer_file_content_from_task(self, task: str, filepath: str) -> str:
+        """Infer file content from quick-path natural language requests.
+
+        This keeps fast execution while handling prompts like:
+        "Create new.txt and add python code in it".
+        """
+        task_lower = task.lower()
+
+        # Respect explicit empty-file intent
+        if any(phrase in task_lower for phrase in ["empty file", "blank file", "without content"]):
+            return ""
+
+        ext_map = {
+            ".py": "python",
+            ".js": "javascript",
+            ".ts": "typescript",
+            ".java": "java",
+            ".c": "c",
+            ".cpp": "cpp",
+            ".cc": "cpp",
+            ".cxx": "cpp",
+            ".cs": "csharp",
+            ".go": "go",
+            ".rs": "rust",
+            ".php": "php",
+            ".rb": "ruby",
+            ".kt": "kotlin",
+            ".swift": "swift",
+            ".sh": "bash",
+            ".bash": "bash",
+            ".html": "html",
+            ".css": "css",
+            ".sql": "sql",
+            ".json": "json",
+            ".yml": "yaml",
+            ".yaml": "yaml",
+            ".md": "markdown",
+            ".ex": "elixir",
+            ".exs": "elixir",
+        }
+
+        # If user asked to add/write code, infer requested language from prompt.
+        language_cues = {
+            "python": ["python"],
+            "javascript": ["javascript", "node"],
+            "typescript": ["typescript"],
+            "java": [" java ", "java code"],
+            "c": [" c code", " language c"],
+            "cpp": ["c++", "cpp"],
+            "csharp": ["c#", "csharp", "dotnet"],
+            "go": ["golang", "go code", " go "],
+            "rust": ["rust"],
+            "php": ["php"],
+            "ruby": ["ruby"],
+            "kotlin": ["kotlin"],
+            "swift": ["swift"],
+            "bash": ["bash", "shell", "sh script"],
+            "html": ["html"],
+            "css": ["css"],
+            "sql": ["sql", "database query"],
+            "json": ["json"],
+            "yaml": ["yaml"],
+            "markdown": ["markdown"],
+            "elixir": ["elixir"],
+        }
+
+        def _extract_requested_language() -> Optional[str]:
+            normalized = f" {task_lower} "
+
+            patterns = [
+                r"(?:add|write|generate|create)\s+([a-z0-9#+._-]{2,30})\s+(?:code|script|program)",
+                r"(?:in|using|with)\s+([a-z0-9#+._-]{2,30})\s+(?:code|script|program)",
+                r"([a-z0-9#+._-]{2,30})\s+(?:code|script|program)",
+            ]
+
+            for pattern in patterns:
+                m = re.search(pattern, normalized)
+                if m:
+                    token = m.group(1).strip().lower().strip('.,;:!?')
+                    if token not in {'a', 'an', 'the', 'some', 'any'}:
+                        return token
+            return None
+
+        def _detect_language() -> str:
+            normalized = f" {task_lower} "
+
+            def _cue_in_text(cue: str) -> bool:
+                cue = cue.strip().lower()
+                if not cue:
+                    return False
+                if re.fullmatch(r"[a-z0-9]+", cue):
+                    return bool(re.search(rf"\b{re.escape(cue)}\b", normalized))
+                return cue in normalized
+
+            for lang, cues in language_cues.items():
+                if any(_cue_in_text(cue) for cue in cues):
+                    return lang
+
+            return ext_map.get(Path(filepath).suffix.lower(), "python")
+
+        requested_language = _extract_requested_language()
+        language = requested_language or _detect_language()
+
+        generic_code_cues = [
+            "add code",
+            "write code",
+            "with code",
+            "code in it",
+            "add a code",
+        ]
+
+        action_verbs = ["add", "write", "implement", "create", "make", "build", "generate"]
+        has_code_extension = Path(filepath).suffix.lower() in ext_map
+
+        wants_code = any(cue in task_lower for cue in generic_code_cues) or any(
+            cue in f" {task_lower} "
+            for cues in language_cues.values()
+            for cue in cues
+        ) or (
+            bool(requested_language) and any(token in task_lower for token in ["code", "script", "program"])
+        ) or (
+            has_code_extension and any(v in task_lower for v in action_verbs)
+        ) or bool(re.search(r"add\s+.+\s+(?:in it|on it|to it)", task_lower))
+
+        def _extract_topic() -> str:
+            normalized = task_lower
+            if any(word in normalized for word in ["network", "socket", "http", "api", "client", "server"]):
+                return "network"
+            if any(word in normalized for word in ["add two numbers", "sum two numbers", "addition", "add numbers", "sum numbers"]):
+                return "arithmetic_add_two_numbers"
+            if any(word in normalized for word in ["file", "read", "write", "csv", "json parse"]):
+                return "file processing"
+            if any(word in normalized for word in ["sort", "search", "algorithm", "dsa", "array"]):
+                return "algorithm"
+
+            match = re.search(r"(?:for|about|related to)\s+([a-z0-9 _\-]{3,60})", normalized)
+            if match:
+                candidate = match.group(1).strip(" .,:;!?")
+                candidate = re.sub(r"\b(code|file|script|program|language)\b", "", candidate).strip()
+                if candidate:
+                    return candidate
+            return "general"
+
+        topic = _extract_topic()
+
+        # Prefer explicit fenced code blocks from user prompt.
+        fenced_blocks = re.findall(r"```(?:[a-zA-Z0-9_+-]+)?\n([\s\S]*?)```", task)
+        if fenced_blocks and any(block.strip() for block in fenced_blocks):
+            return fenced_blocks[0].strip() + "\n"
+
+        # If quoted content is present (e.g., write "print('hi')"), prefer that content.
+        quoted = re.findall(r'["\']([^"\']{2,2000})["\']', task)
+        if quoted and any(keyword in task_lower for keyword in ["write", "add", "content", "code"]):
+            for candidate in quoted:
+                if os.path.basename(filepath) not in candidate:
+                    return candidate
+
+        if wants_code:
+            ai_generated = self._generate_code_dynamically(
+                task=task,
+                filepath=filepath,
+                language=language,
+                topic=topic
+            )
+            if ai_generated:
+                return ai_generated
+
+            # Model did not return usable code.
+            # Return empty so caller can surface/create behavior without static placeholder code.
+            return ""
+
+        return ""
+
+    def _generate_code_dynamically(self, task: str, filepath: str, language: str, topic: str) -> str:
+        """Generate code content dynamically for any requested language using the execution model."""
+        base_prompt = f"""Generate only source code (no markdown fences, no explanation).
+
+User request: {task}
+Target file: {filepath}
+Requested language: {language}
+Topic intent: {topic}
+
+Requirements:
+1. Output must be valid {language} code.
+2. Keep it minimal but meaningful for the requested topic.
+3. If the topic is unclear, include a practical starter skeleton.
+4. Do not include any text outside the code.
+"""
+
+        def _extract_code(raw: str) -> str:
+            text = (raw or "").strip()
+            if not text:
+                return ""
+
+            if "```" in text:
+                parts = re.findall(r"```(?:[a-zA-Z0-9_+\-#.]*)\n([\s\S]*?)```", text)
+                if parts:
+                    text = parts[0].strip()
+                else:
+                    text = text.replace("```", "").strip()
+
+            lines = [ln for ln in text.splitlines() if ln.strip()]
+            non_comment = [
+                ln for ln in lines
+                if not re.match(r"^\s*(#|//|/\*|\*|--)", ln.strip())
+            ]
+            if not non_comment:
+                return ""
+
+            return text + "\n"
+
+        prompts = [
+            base_prompt,
+            base_prompt + "\nFocus on implementing the main requested behavior directly (for example, if user asks to add two numbers, include that exact logic).",
+        ]
+
+        # Execution model first (with retries), then thinking model as fallback.
+        for prompt in prompts:
+            try:
+                response = self._get_execution_model().generate_content(prompt)
+                extracted = _extract_code(getattr(response, 'text', ''))
+                if extracted:
+                    return extracted
+            except Exception:
+                continue
+
+        for prompt in prompts[:1]:
+            try:
+                response = self._get_thinking_model().generate_content(prompt)
+                extracted = _extract_code(getattr(response, 'text', ''))
+                if extracted:
+                    return extracted
+            except Exception:
+                continue
+
+        return ""
     
     def _create_directory_fast(self, dirpath: str, original_task: str) -> Dict[str, Any]:
         """Create directory quickly"""
@@ -1210,9 +1488,24 @@ CRITICAL: For "{task}" - if it's about LISTING/SHOWING/DISPLAYING → MUST use s
         
         tool = step.get('tool', 'auto')
         action = step.get('action', '')
+        action_key = str(action).strip().lower()
         
         # Merge context with engine context
         full_context = {**self.context_engine.get_context(), **(context or {})}
+
+        # Direct plan action handlers (bypass tool inference)
+        if action_key == 'create_file':
+            path = step.get('path')
+            if not path:
+                raise ValueError("create_file step requires 'path'")
+            return self._create_file_step(path, full_context)
+
+        if action_key == 'write_file':
+            path = step.get('path')
+            if not path:
+                raise ValueError("write_file step requires 'path'")
+            content = step.get('content', '')
+            return self._write_file_step(path, content, full_context)
         
         # Let AI decide which tool to use if not specified
         if tool == 'auto':
@@ -1268,6 +1561,35 @@ CRITICAL: For "{task}" - if it's about LISTING/SHOWING/DISPLAYING → MUST use s
                 "error": str(e)
             })
             raise
+
+    def _create_file_step(self, path_hint: str, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Create file for explicit plan step actions."""
+        path = Path(self.context_engine.resolve_path(str(path_hint)))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch(exist_ok=True)
+        return {
+            "success": True,
+            "operation": "create_file",
+            "path": str(path),
+            "exists": path.exists()
+        }
+
+    def _write_file_step(self, path_hint: str, content: Any, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Write file content for explicit plan step actions."""
+        path = Path(self.context_engine.resolve_path(str(path_hint)))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        text_content = "" if content is None else str(content)
+        if not text_content.strip():
+            # If planner omitted content, infer from original command/language intent.
+            source_task = str(context.get('command') or context.get('task') or 'write code')
+            text_content = self._infer_file_content_from_task(source_task, str(path))
+        path.write_text(text_content)
+        return {
+            "success": True,
+            "operation": "write_file",
+            "path": str(path),
+            "bytes_written": len(text_content)
+        }
     
     def _decide_tool(self, action: str, context: Dict[str, Any]) -> str:
         """Use AI to decide which tool to use"""
@@ -1521,6 +1843,10 @@ JSON Response:"""
                 # Create parent directories
                 path.parent.mkdir(parents=True, exist_ok=True)
                 content = operation.get('content', '')
+                if not content:
+                    # Fallback inference for prompts like:
+                    # "create file X and add <language> code"
+                    content = self._infer_file_content_from_task(action, str(path))
                 path.write_text(content)
                 
                 self._send_update(

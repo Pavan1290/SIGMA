@@ -95,6 +95,17 @@ class ModelManager:
             ),
             
             # Ollama (Local models - FREE!)
+            "ollama-llama3.1": AIModel(
+                id="ollama-llama3.1",
+                name="Llama 3.1 (Local)",
+                provider="ollama",
+                model_name="llama3.1",
+                description="🏠 Local Meta model - no limits",
+                capabilities=["code", "chat"],
+                cost_per_1m=0.0,
+                rate_limit=None,
+                api_key_env=""
+            ),
             "ollama-llama3.2": AIModel(
                 id="ollama-llama3.2",
                 name="Llama 3.2 (Local)",
@@ -115,6 +126,17 @@ class ModelManager:
                 capabilities=["code"],
                 cost_per_1m=0.0,
                 rate_limit=None,  # Unlimited - runs locally
+                api_key_env=""
+            ),
+            "ollama-qwen3": AIModel(
+                id="ollama-qwen3",
+                name="Qwen3 (Local)",
+                provider="ollama",
+                model_name="qwen3",
+                description="🏠 Local Qwen model - no limits",
+                capabilities=["code", "chat", "reasoning"],
+                cost_per_1m=0.0,
+                rate_limit=None,
                 api_key_env=""
             ),
             
@@ -154,6 +176,16 @@ class ModelManager:
                         key, val = line.split('=', 1)
                         env_vars[key.strip()] = val.strip()
         
+        ollama_tags = set()
+        if requests:
+            try:
+                resp = requests.get("http://localhost:11434/api/tags", timeout=2)
+                if resp.status_code == 200:
+                    data = resp.json() if resp.text else {}
+                    ollama_tags = {str(m.get("name", "")).strip() for m in data.get("models", []) if isinstance(m, dict)}
+            except Exception:
+                ollama_tags = set()
+
         for model_id, model in self.available_models.items():
             if model.api_key_env:
                 # Check both os.getenv and .env file
@@ -162,19 +194,27 @@ class ModelManager:
             else:
                 # Ollama - check if server is running
                 if model.provider == "ollama":
-                    try:
-                        if requests:
-                            resp = requests.get("http://localhost:11434/api/tags", timeout=1)
-                            model.available = resp.status_code == 200
-                        else:
-                            model.available = False
-                    except:
+                    if not ollama_tags:
                         model.available = False
+                    else:
+                        target = model.model_name
+                        model.available = (
+                            target in ollama_tags
+                            or f"{target}:latest" in ollama_tags
+                        )
     
     def _set_defaults(self):
         """Set default models based on availability - ALWAYS prefer Groq for speed"""
         # PRIORITY ORDER: Groq (fastest) > Gemini > Ollama (local)
-        priority_order = ["groq-llama-3.3-70b", "gemini-2.0-flash", "ollama-llama3.2", "openai-gpt4"]
+        priority_order = [
+            "groq-llama-3.3-70b",
+            "gemini-2.0-flash",
+            "ollama-llama3.1",
+            "ollama-qwen3",
+            "ollama-llama3.2",
+            "ollama-codellama",
+            "openai-gpt4",
+        ]
         
         for model_id in priority_order:
             if model_id in self.available_models and self.available_models[model_id].available:
@@ -310,13 +350,49 @@ class OllamaWrapper:
     def __init__(self, model_name):
         self.model_name = model_name
         self.base_url = "http://localhost:11434"
+
+    def _choose_fallback_model(self) -> Optional[str]:
+        try:
+            resp = requests.get(f"{self.base_url}/api/tags", timeout=3)
+            if resp.status_code != 200:
+                return None
+            data = resp.json() if resp.text else {}
+            names = [str(m.get("name", "")).strip() for m in data.get("models", []) if isinstance(m, dict)]
+            preferred = ["llama3.1", "qwen3", "llama3", "codellama"]
+            for pref in preferred:
+                for name in names:
+                    if name == pref or name.startswith(f"{pref}:"):
+                        return name
+            return names[0] if names else None
+        except Exception:
+            return None
     
     def generate_content(self, prompt):
+        payload = {"model": self.model_name, "prompt": prompt, "stream": False}
         response = requests.post(
             f"{self.base_url}/api/generate",
-            json={"model": self.model_name, "prompt": prompt, "stream": False}
+            json=payload,
+            timeout=90
         )
-        return TextResponse(response.json()["response"])
+
+        data = response.json() if response.text else {}
+        if response.status_code != 200 or "response" not in data:
+            fallback = self._choose_fallback_model()
+            if fallback and fallback != self.model_name:
+                retry_payload = {"model": fallback, "prompt": prompt, "stream": False}
+                retry = requests.post(
+                    f"{self.base_url}/api/generate",
+                    json=retry_payload,
+                    timeout=90
+                )
+                retry_data = retry.json() if retry.text else {}
+                if retry.status_code == 200 and "response" in retry_data:
+                    return TextResponse(retry_data["response"])
+
+            err = data.get("error") if isinstance(data, dict) else None
+            raise Exception(err or f"Ollama generate failed (status {response.status_code})")
+
+        return TextResponse(data["response"])
 
 class TextResponse:
     """Unified response object"""
