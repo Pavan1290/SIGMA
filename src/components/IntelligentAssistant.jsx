@@ -612,6 +612,10 @@ const icons = {
 
 function IntelligentAssistant({ sidebarMode = false }) {
   const [input, setInput] = useState("");
+  const [selectedMode, setSelectedMode] = useState(() => {
+    const savedMode = localStorage.getItem("assistantMode");
+    return savedMode === "ask" || savedMode === "agent" ? savedMode : "agent";
+  });
   const [messages, setMessages] = useState([]);
   const [agentStatus, setAgentStatus] = useState({
     agent: null,
@@ -660,6 +664,10 @@ function IntelligentAssistant({ sidebarMode = false }) {
   const scrollTimeoutRef = useRef(null); // NEW: Timeout for auto-show navbar
   const messagesContainerRef = useRef(null); // NEW: Reference to scrollable container
   const lastScrollTimeRef = useRef(0); // NEW: Track last scroll time
+
+  useEffect(() => {
+    localStorage.setItem("assistantMode", selectedMode);
+  }, [selectedMode]);
 
   // Save models to localStorage whenever they change
   useEffect(() => {
@@ -1033,6 +1041,7 @@ function IntelligentAssistant({ sidebarMode = false }) {
     if (!input.trim() || isProcessing) return;
 
     const userCommand = input.trim();
+    const modeForRequest = selectedMode;
     setInput("");
     setIsProcessing(true);
     setHeaderHidden(true); // Hide navbar during task execution
@@ -1051,7 +1060,7 @@ function IntelligentAssistant({ sidebarMode = false }) {
       const response = await fetch(`${BACKEND_HTTP}/command`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ command: userCommand, mode: "agent" }),
+        body: JSON.stringify({ command: userCommand, mode: modeForRequest }),
       });
 
       if (!response.ok) {
@@ -1071,11 +1080,20 @@ function IntelligentAssistant({ sidebarMode = false }) {
 
         // Create rich metadata for the task
         const metadata = {
-          agent: data.agent_used || data.result?.agent_used || "unknown",
+          agent:
+            modeForRequest === "ask"
+              ? "Ask Mode"
+              : data.agent_used || data.result?.agent_used || "unknown",
           reasoning: data.thinking_process || data.result?.reasoning,
           plan: data.result?.plan || {
-            understanding: "Completed",
-            approach: "Using intelligent agents",
+            understanding:
+              modeForRequest === "ask"
+                ? "Answered as a direct question"
+                : "Completed",
+            approach:
+              modeForRequest === "ask"
+                ? "No action execution; response generated directly"
+                : "Using intelligent agents",
           },
           results: [
             {
@@ -2044,6 +2062,27 @@ function IntelligentAssistant({ sidebarMode = false }) {
       {/* Input Form with Modern Design */}
       <form onSubmit={handleSubmit} className="input-form-modern">
         <div className="input-container">
+          <div className="mode-selector" role="group" aria-label="Response mode">
+            <button
+              type="button"
+              className={`mode-option ${selectedMode === "ask" ? "active" : ""}`}
+              onClick={() => setSelectedMode("ask")}
+              disabled={isProcessing}
+              title="Ask mode: get a direct answer"
+            >
+              Ask
+            </button>
+            <button
+              type="button"
+              className={`mode-option ${selectedMode === "agent" ? "active" : ""}`}
+              onClick={() => setSelectedMode("agent")}
+              disabled={isProcessing}
+              title="Agent mode: execute tasks using intelligent agents"
+            >
+              Agent
+            </button>
+          </div>
+
           <div className="input-wrapper">
             <svg
               className="input-icon"
@@ -2079,8 +2118,12 @@ function IntelligentAssistant({ sidebarMode = false }) {
               onChange={(e) => setInput(e.target.value)}
               placeholder={
                 isProcessing
-                  ? "Agent is executing your command..."
-                  : "What would you like me to do?"
+                  ? selectedMode === "ask"
+                    ? "Generating answer..."
+                    : "Agent is executing your command..."
+                  : selectedMode === "ask"
+                    ? "Ask a question..."
+                    : "What would you like me to do?"
               }
               disabled={isProcessing}
               className="command-input-modern"
@@ -2159,7 +2202,7 @@ function IntelligentAssistant({ sidebarMode = false }) {
               type="submit"
               disabled={!input.trim()}
               className="execute-button"
-              aria-label="Execute command"
+              aria-label={selectedMode === "ask" ? "Ask question" : "Execute command"}
             >
               <svg
                 className="button-icon"
@@ -2169,7 +2212,9 @@ function IntelligentAssistant({ sidebarMode = false }) {
               >
                 <path d="M5 3L19 12L5 21V3Z" fill="currentColor" />
               </svg>
-              <span className="button-text">Execute</span>
+              <span className="button-text">
+                {selectedMode === "ask" ? "Ask" : "Execute"}
+              </span>
               <span className="button-glow"></span>
             </button>
           )}

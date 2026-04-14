@@ -7,6 +7,10 @@ Minimal latency, maximum performance
 import os
 import sys
 import asyncio
+import subprocess
+import platform
+import socket
+import shutil
 from pathlib import Path
 import json
 from typing import Dict, Any, List, Optional
@@ -79,6 +83,147 @@ class CommandResponse(BaseModel):
     result: Dict[str, Any]
     agent_used: Optional[str] = None
     thinking_process: Optional[str] = None
+
+
+SYSTEM_NETWORK_KEYWORDS = {
+    "system", "network", "ip", "internet", "dns", "gateway", "route",
+    "hostname", "cpu", "memory", "ram", "disk", "storage", "uptime",
+    "interface", "latency", "bandwidth", "ethernet", "wifi", "port"
+}
+
+
+def _safe_run(command: List[str], timeout: float = 2.0) -> str:
+    """Run a local read-only command safely and return output text."""
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+        output = (result.stdout or result.stderr or "").strip()
+        return output[:3000]
+    except Exception:
+        return ""
+
+
+def _read_meminfo_mb() -> Dict[str, Optional[float]]:
+    """Read Linux memory stats from /proc/meminfo in MB when available."""
+    mem_total = None
+    mem_available = None
+    try:
+        with open("/proc/meminfo", "r", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("MemTotal:"):
+                    mem_total = round(int(line.split()[1]) / 1024.0, 2)
+                elif line.startswith("MemAvailable:"):
+                    mem_available = round(int(line.split()[1]) / 1024.0, 2)
+                if mem_total is not None and mem_available is not None:
+                    break
+    except Exception:
+        pass
+    return {
+        "total_mb": mem_total,
+        "available_mb": mem_available,
+        "used_mb": round(mem_total - mem_available, 2)
+        if mem_total is not None and mem_available is not None
+        else None,
+    }
+
+
+def _collect_system_network_snapshot() -> Dict[str, Any]:
+    """Collect non-destructive local system and network facts for Ask mode."""
+    hostname = socket.gethostname()
+
+    local_ip = ""
+    try:
+        local_ip = socket.gethostbyname(hostname)
+    except Exception:
+        pass
+
+    # Better local interface detection fallback (no packets sent).
+    if not local_ip or local_ip.startswith("127."):
+        try:
+            udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            udp.connect(("8.8.8.8", 80))
+            local_ip = udp.getsockname()[0]
+            udp.close()
+        except Exception:
+            local_ip = local_ip or "unknown"
+
+    uptime_seconds = None
+    try:
+        with open("/proc/uptime", "r", encoding="utf-8") as f:
+            uptime_seconds = int(float(f.read().split()[0]))
+    except Exception:
+        pass
+
+    disk = shutil.disk_usage("/")
+
+    dns_servers = []
+    try:
+        with open("/etc/resolv.conf", "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if stripped.startswith("nameserver"):
+                    parts = stripped.split()
+                    if len(parts) > 1:
+                        dns_servers.append(parts[1])
+    except Exception:
+        pass
+
+    return {
+        "system": {
+            "hostname": hostname,
+            "platform": platform.platform(),
+            "python": platform.python_version(),
+            "cpu_count": os.cpu_count(),
+            "load_avg": os.getloadavg() if hasattr(os, "getloadavg") else None,
+            "uptime_seconds": uptime_seconds,
+            "memory_mb": _read_meminfo_mb(),
+            "disk_root": {
+                "total_gb": round(disk.total / (1024 ** 3), 2),
+                "used_gb": round(disk.used / (1024 ** 3), 2),
+                "free_gb": round(disk.free / (1024 ** 3), 2),
+            },
+        },
+        "network": {
+            "local_ip": local_ip,
+            "interfaces": _safe_run(["ip", "-brief", "addr"]) or _safe_run(["hostname", "-I"]),
+            "default_route": _safe_run(["ip", "route", "show", "default"]),
+            "dns_servers": dns_servers,
+        },
+    }
+
+
+def _is_system_network_query(command: str) -> bool:
+    """Detect whether Ask mode should enrich response with local system/network data."""
+    lowered = command.lower()
+    return any(keyword in lowered for keyword in SYSTEM_NETWORK_KEYWORDS)
+
+
+def _format_snapshot_fallback(snapshot: Dict[str, Any]) -> str:
+    """Fallback plain-text response if model generation fails."""
+    system = snapshot.get("system", {})
+    network = snapshot.get("network", {})
+    mem = system.get("memory_mb", {})
+    disk = system.get("disk_root", {})
+    lines = [
+        "System and network snapshot:",
+        f"- Hostname: {system.get('hostname', 'unknown')}",
+        f"- Platform: {system.get('platform', 'unknown')}",
+        f"- CPU cores: {system.get('cpu_count', 'unknown')}",
+        f"- Memory (MB): total={mem.get('total_mb')} available={mem.get('available_mb')} used={mem.get('used_mb')}",
+        f"- Disk / (GB): total={disk.get('total_gb')} used={disk.get('used_gb')} free={disk.get('free_gb')}",
+        f"- Local IP: {network.get('local_ip', 'unknown')}",
+        f"- Default route: {network.get('default_route', 'unknown')}",
+        f"- DNS servers: {', '.join(network.get('dns_servers', [])) or 'unknown'}",
+    ]
+    if network.get("interfaces"):
+        lines.append("- Interfaces:")
+        lines.append(str(network.get("interfaces")))
+    return "\n".join(lines)
 
 # Initialize agents
 def init_agents():
@@ -204,12 +349,70 @@ async def execute_command(request: CommandRequest):
     """Execute command with minimal overhead"""
     
     command = request.command.strip()
+    mode = (request.mode or "agent").strip().lower()
+
+    if mode not in {"agent", "ask"}:
+        mode = "agent"
     
     print(f"\n{'='*80}", flush=True)
     print(f"📝 NEW COMMAND: {command}", flush=True)
+    print(f"🧭 MODE: {mode.upper()}", flush=True)
     print(f"{'='*80}", flush=True)
     
     try:
+        # Ask mode: answer directly without executing system/web/email actions.
+        if mode == "ask":
+            snapshot = _collect_system_network_snapshot() if _is_system_network_query(command) else None
+
+            ask_prompt = (
+                "You are SIGMA-OS in Ask mode. "
+                "Answer the user's request directly, clearly, and concisely. "
+                "Do not claim to execute commands or take actions. "
+                "If a request needs execution, explain what would be done.\n\n"
+                f"User request: {command}"
+            )
+
+            if snapshot:
+                ask_prompt += (
+                    "\n\nLocal system/network snapshot (real-time, use this for accurate answers):\n"
+                    f"{json.dumps(snapshot, indent=2)}\n\n"
+                    "If the user asked for system or network info, answer using this data first."
+                )
+
+            ask_text = ""
+            try:
+                ask_response = model_manager.get_thinking_model().generate_content(ask_prompt)
+                ask_text = getattr(ask_response, "text", "") or ""
+            except Exception:
+                ask_text = ""
+
+            if not ask_text.strip():
+                ask_text = _format_snapshot_fallback(snapshot) if snapshot else "I could not generate a response."
+
+            formatted = format_output(ask_text, command, True)
+
+            return CommandResponse(
+                success=True,
+                result={
+                    "success": True,
+                    "task": command,
+                    "mode": mode,
+                    "results": [
+                        {
+                            "command": command,
+                            "output": ask_text,
+                            "formatted_response": formatted,
+                            "success": True,
+                            "exit_code": 0,
+                        }
+                    ],
+                    "formatted_output": formatted,
+                    "system_network_snapshot": snapshot,
+                },
+                agent_used="ask",
+                thinking_process="Answered directly in Ask mode"
+            )
+
         # Route to best agent (99% of time it's system agent)
         if any(word in command.lower() for word in ['email', 'mail', 'send email']):
             agent_name = 'email'
@@ -226,7 +429,7 @@ async def execute_command(request: CommandRequest):
         # Execute
         result = agent.run(
             task=command,
-            context={"mode": request.mode, "command": command}
+            context={"mode": mode, "command": command}
         )
         
         print(f"✅ Execution complete!", flush=True)

@@ -38,6 +38,21 @@ let isQuitting = false;
 
 const toPosixPath = (value) => value.replace(/\\/g, "/");
 
+const writeToStreamSafely = (stream, message) => {
+  if (!stream || stream.destroyed || !stream.writable) {
+    return;
+  }
+
+  try {
+    stream.write(message);
+  } catch (error) {
+    // Electron apps launched without an attached terminal can hit EPIPE.
+    if (error?.code !== "EPIPE") {
+      throw error;
+    }
+  }
+};
+
 const getPathCandidates = (...values) => {
   return [...new Set(values.filter(Boolean))];
 };
@@ -317,11 +332,11 @@ const startBackend = async () => {
       );
 
       child.stdout?.on("data", (chunk) => {
-        process.stdout.write(`[backend] ${chunk}`);
+        writeToStreamSafely(process.stdout, `[backend] ${chunk}`);
       });
 
       child.stderr?.on("data", (chunk) => {
-        process.stderr.write(`[backend] ${chunk}`);
+        writeToStreamSafely(process.stderr, `[backend] ${chunk}`);
       });
 
       child.on("error", (error) => {
