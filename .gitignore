@@ -62,3 +62,4 @@ screenshots/
 
 # Playwright
 playwright/.cache/
+playwright/.local-browsers/
