@@ -165,7 +165,7 @@ class ContextAwareEngine:
         
     def resolve_path(self, path_hint: str) -> str:
         """Intelligently resolve a path from various hints"""
-        path_hint = path_hint.strip()
+        path_hint = path_hint.strip().strip('"\'')
 
         # Expand ~ and environment variables first
         expanded = os.path.expanduser(os.path.expandvars(path_hint))
@@ -191,10 +191,35 @@ class ContextAwareEngine:
             'tmp': self.temp
         }
         
-        path_lower = path_hint.lower()
-        for keyword, path in keywords.items():
-            if keyword in path_lower:
-                return path
+        path_lower = expanded.lower().strip()
+
+        # Exact keyword matches (e.g., "desktop", "documents")
+        if path_lower in keywords:
+            return keywords[path_lower]
+
+        # Prefix keyword + subpath (e.g., "desktop/report.txt", "docs/project")
+        for keyword, base_path in keywords.items():
+            for sep in ['/', '\\']:
+                prefix = f"{keyword}{sep}"
+                if path_lower.startswith(prefix):
+                    remainder = expanded[len(prefix):].lstrip('/\\')
+                    return os.path.join(base_path, remainder) if remainder else base_path
+
+        # Natural-language form near the end (e.g., "... in documents", "... on desktop")
+        location_match = re.search(
+            r"\b(?:on|in|to)\s+(desktop|documents?|docs|downloads|pictures|videos|music|home|temp|tmp)\b$",
+            path_lower,
+        )
+        if location_match:
+            key = location_match.group(1)
+            key_map = {
+                'document': 'documents',
+                'documents': 'documents',
+                'docs': 'docs',
+            }
+            resolved_key = key_map.get(key, key)
+            if resolved_key in keywords:
+                return keywords[resolved_key]
         
         # If relative, join with cwd
         return os.path.join(self.cwd, expanded)
@@ -305,6 +330,8 @@ class SystemAgent(IntelligentAgent):
         # Quick access to common paths
         self.home = self.context_engine.home
         self.desktop = self.context_engine.desktop
+        self.documents = self.context_engine.documents
+        self.downloads = self.context_engine.downloads
         self.cwd = self.context_engine.cwd
         self.os_type = self.context_engine.os_type
     
@@ -337,6 +364,30 @@ class SystemAgent(IntelligentAgent):
         
         task_lower = task.lower()
         full_context = {**self.context_engine.get_context(), **context}
+
+        # ========== CREATE INTENT (PRIORITY) ==========
+        # Handle creation requests before generic keyword handlers like list/tree/top,
+        # otherwise names such as "Tree", "list", or "top" can trigger wrong tools.
+        if 'create' in task_lower:
+            folder_intent = bool(re.search(r"\b(folder|directory|dir|mkdir)\b", task_lower))
+            file_intent = bool(re.search(r"\b(file|document|txt|md|json|yaml|yml|py|js|ts|csv|log)\b", task_lower))
+
+            if folder_intent:
+                dirname = self._extract_filename(task)
+                if dirname:
+                    target_dir = self._extract_target_directory(task_lower)
+                    dirpath = self._build_target_path(dirname, target_dir)
+                    return self._create_directory_fast(dirpath, task)
+
+            if file_intent:
+                filename = self._extract_filename(task)
+                if filename:
+                    # Normalize explicit text-file requests to .txt when no extension is provided.
+                    if 'text file' in task_lower and not Path(filename).suffix:
+                        filename = f"{filename}.txt"
+                    target_dir = self._extract_target_directory(task_lower)
+                    filepath = self._build_target_path(filename, target_dir)
+                    return self._create_file_fast(filepath, task)
         
         # ========== SCREENSHOTS (10+ variations) ==========
         if any(word in task_lower for word in ['screenshot', 'screen capture', 'screen grab', 'capture screen', 'picture of screen', 'snap screen']):
@@ -440,7 +491,7 @@ class SystemAgent(IntelligentAgent):
                     else:
                         return self._shell_fast(f"pkill {target}", task)
         
-        if 'top' in task_lower or 'htop' in task_lower:
+        if re.search(r"\b(top|htop)\b", task_lower):
             return self._shell_fast("ps aux --sort=-%mem | head -20", task)
         
         # ========== NETWORK OPERATIONS (20+ variations) ==========
@@ -498,23 +549,19 @@ class SystemAgent(IntelligentAgent):
                     break
         
         # ========== FILE OPERATIONS (40+ variations) ==========
-        if 'create' in task_lower and any(word in task_lower for word in ['file', 'txt', 'document', 'empty file']):
-            filename = self._extract_filename(task)
-            if filename:
-                filepath = os.path.join(self.desktop, filename)
-                return self._create_file_fast(filepath, task)
-        
-        if 'create' in task_lower and any(word in task_lower for word in ['folder', 'directory', 'dir']):
-            dirname = self._extract_filename(task)
-            if dirname:
-                dirpath = os.path.join(self.desktop, dirname)
-                return self._create_directory_fast(dirpath, task)
-        
         if any(word in task_lower for word in ['read file', 'cat ', 'show file', 'display file', 'view file', 'open file']):
             filename = self._extract_filename(task)
             if filename:
-                filepath = os.path.join(self.cwd, filename)
+                target_dir = self._extract_target_directory(task_lower)
+                filepath = self._build_target_path(filename, target_dir)
                 return self._shell_fast(f"cat {filepath}", task)
+
+        if any(word in task_lower for word in ['delete file', 'remove file', 'rm file']):
+            filename = self._extract_filename(task)
+            if filename:
+                target_dir = self._extract_target_directory(task_lower)
+                filepath = self._build_target_path(filename, target_dir)
+                return self._shell_fast(f"rm -f {filepath}", task)
         
         if 'touch' in task_lower:
             filename = self._extract_filename(task)
@@ -812,9 +859,33 @@ class SystemAgent(IntelligentAgent):
         """
         task_lower = task.lower()
 
+        def _generate_plain_text_lines(topic: str, line_count: int) -> str:
+            topic = (topic or "nature").strip().strip('.,;:')
+            topic_cap = topic[:1].upper() + topic[1:] if topic else "Nature"
+            lines = []
+            for i in range(1, line_count + 1):
+                lines.append(
+                    f"{i}. {topic_cap} teaches balance, beauty, and resilience through every season and landscape."
+                )
+            return "\n".join(lines) + "\n"
+
         # Respect explicit empty-file intent
         if any(phrase in task_lower for phrase in ["empty file", "blank file", "without content"]):
             return ""
+
+        # Plain-text writing requests (non-code), e.g.:
+        # "create a text file named nature and write 100 lines about nature"
+        line_request = re.search(r"\bwrite\s+(\d{1,4})\s+lines?\s+about\s+(.+)$", task, flags=re.IGNORECASE)
+        if line_request and not re.search(r"\b(code|script|program)\b", task_lower):
+            line_count = max(1, min(500, int(line_request.group(1))))
+            topic = line_request.group(2)
+            topic = re.split(
+                r"\s+(?:in|on|to)\s+(?:the\s+)?(?:file|folder|directory|desktop|documents?|downloads?|home|cwd|current\s+directory)\b",
+                topic,
+                maxsplit=1,
+                flags=re.IGNORECASE,
+            )[0].strip()
+            return _generate_plain_text_lines(topic, line_count)
 
         ext_map = {
             ".py": "python",
@@ -1319,18 +1390,93 @@ Requirements:
 
     
     def _extract_filename(self, task: str) -> Optional[str]:
-        """Extract filename from task"""
-        words = task.split()
-        for i, word in enumerate(words):
-            if word in ['called', 'named', 'as'] and i + 1 < len(words):
-                return words[i + 1].rstrip('.,;:')
-        
-        for i, word in enumerate(words):
-            if word in ['file', 'folder', 'directory'] and i + 1 < len(words):
-                candidate = words[i + 1].rstrip('.,;:')
-                if candidate and len(candidate) < 100:
+        """Extract file/folder name from natural language task text."""
+        text = (task or "").strip()
+        if not text:
+            return None
+
+        def _clean_candidate(raw: str) -> str:
+            candidate = (raw or "").strip().strip('"\'').rstrip('.,;:')
+            # Remove chained instruction clauses that are not part of file/folder name.
+            candidate = re.split(
+                r"\s+(?:and|then)\s+(?:write|add|include|put|insert|with|about)\b",
+                candidate,
+                maxsplit=1,
+                flags=re.IGNORECASE,
+            )[0].strip()
+            candidate = re.sub(r"^as\s+", "", candidate, flags=re.IGNORECASE)
+            return candidate
+
+        # Prefer quoted target names: create file "my note.txt"
+        quoted = re.findall(r'"([^"]+)"|\'([^\']+)\'', text)
+        for pair in quoted:
+            candidate = _clean_candidate(pair[0] or pair[1] or "")
+            if candidate:
+                return candidate
+
+        stop_location = r"\s+(?:on|in|at|to)\s+(?:the\s+)?(?:desktop|documents?|downloads?|home|current\s+directory|cwd)\b"
+        name_until_location_or_end = rf"(.+?)(?={stop_location}|$)"
+
+        patterns = [
+            rf"(?:called|named(?:\s+as)?|as)\s+{name_until_location_or_end}",
+            rf"(?:file|folder|directory|dir)\s+{name_until_location_or_end}",
+            rf"create\s+(?:a\s+|an\s+)?(?:new\s+)?(?:file|folder|directory|dir)\s+{name_until_location_or_end}",
+        ]
+
+        for pattern in patterns:
+            m = re.search(pattern, text, flags=re.IGNORECASE)
+            if m:
+                candidate = _clean_candidate(m.group(1))
+                if candidate and len(candidate) < 255:
                     return candidate
+
+        # Fallback: pick a token that looks like a filename.
+        tokens = [tok.strip('"\'').rstrip('.,;:') for tok in text.split()]
+        for tok in tokens:
+            if not tok:
+                continue
+            if re.search(r"\.[a-zA-Z0-9]{1,10}$", tok):
+                return tok
+
         return None
+
+    def _extract_target_directory(self, task_lower: str) -> str:
+        """Resolve destination directory from user phrasing for quick create operations."""
+        if re.search(r"\b(?:on|in|to)\s+(?:the\s+)?desktop\b", task_lower):
+            return self.desktop
+        if re.search(r"\b(?:on|in|to)\s+(?:the\s+)?(?:documents?|docs)\b", task_lower):
+            return self.documents
+        if re.search(r"\b(?:on|in|to)\s+(?:the\s+)?downloads?\b", task_lower):
+            return self.downloads
+        if re.search(r"\b(?:on|in|to)\s+(?:the\s+)?home(?:\s+directory)?\b", task_lower):
+            return self.home
+        if re.search(r"\b(?:on|in|to)\s+(?:the\s+)?(?:current\s+directory|cwd|here)\b", task_lower):
+            return self.cwd
+        return self.desktop
+
+    def _build_target_path(self, name_or_path: str, target_dir: str) -> str:
+        """Build an absolute target path for quick create operations."""
+        candidate = (name_or_path or "").strip()
+        if not candidate:
+            return target_dir
+
+        # Keep explicit absolute/home/dot-relative paths as user intent.
+        if (
+            candidate.startswith('~')
+            or os.path.isabs(candidate)
+            or candidate.startswith('./')
+            or candidate.startswith('../')
+            or candidate.startswith('.\\')
+            or candidate.startswith('..\\')
+        ):
+            return self.context_engine.resolve_path(candidate)
+
+        # For relative names (including nested paths like project/tree.txt),
+        # honor the detected destination directory.
+        if '/' in candidate or '\\' in candidate:
+            return os.path.join(target_dir, candidate.lstrip('/\\'))
+
+        return os.path.join(target_dir, candidate)
     
     def _smart_execute(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """Smart AI-powered execution for complex tasks"""
