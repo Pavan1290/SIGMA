@@ -46,26 +46,29 @@ class OutputFormatter:
         """Intelligently detect what type of output this is"""
         output_lower = output.lower()
         command_lower = command.lower()
+
+        def has_command_keyword(keywords: List[str]) -> bool:
+            return any(re.search(rf"\b{re.escape(keyword)}\b", command_lower) for keyword in keywords)
         
         # File listing detection
-        if any(keyword in command_lower for keyword in ['ls', 'list', 'dir', 'files']):
+        if has_command_keyword(['ls', 'list', 'dir', 'files']):
             if 'total' in output_lower or (any(x in output for x in ['drwx', '-rw', 'lrw'])):
                 return OutputType.FILE_LISTING
         
         # System info detection
-        if any(keyword in command_lower for keyword in ['systemctl', 'uname', 'lsb', 'hostnamectl', 'system', 'info']):
+        if has_command_keyword(['systemctl', 'uname', 'lsb', 'hostnamectl', 'system', 'info']):
             return OutputType.SYSTEM_INFO
         
         # Process list detection
-        if any(keyword in command_lower for keyword in ['ps', 'top', 'process', 'pgrep', 'pstree']):
+        if has_command_keyword(['ps', 'top', 'process', 'pgrep', 'pstree']):
             return OutputType.PROCESS_LIST
         
         # Disk usage detection
-        if any(keyword in command_lower for keyword in ['df', 'disk', 'du', 'usage', 'storage']):
+        if has_command_keyword(['df', 'disk', 'du', 'usage', 'storage']):
             return OutputType.DISK_USAGE
         
         # Network info detection
-        if any(keyword in command_lower for keyword in ['ip', 'ifconfig', 'netstat', 'ping', 'network', 'connection']):
+        if has_command_keyword(['ip', 'ifconfig', 'netstat', 'ping', 'network', 'connection']):
             return OutputType.NETWORK_INFO
         
         # Error detection
